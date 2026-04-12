@@ -4,7 +4,38 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="82e19332-035b-4e83-a1fe-096a15cf455d" name="Changes" comment="" />
+    <list default="true" id="82e19332-035b-4e83-a1fe-096a15cf455d" name="Changes" comment="projects fisrt commit.">
+      <change afterPath="$PROJECT_DIR$/DTO/student_model.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/alembic.ini" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/alembic/README" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/alembic/env.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/alembic/script.py.mako" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/clients/supabase_client.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/core/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/core/config.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/db/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/db/base.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/db/session.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/models/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/models/student_base.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/repositories/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/repositories/student_repository.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routes/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routes/requests/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routes/requests/otp_generate_request.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routes/requests/otp_verify_request.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routes/responses/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/routes/student_route.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/services/student_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DashboardService/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/DTO/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PaymentService/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/clients/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PaymentService/main.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/uv.lock" beforeDir="false" afterPath="$PROJECT_DIR$/uv.lock" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -24,6 +55,9 @@
   &quot;associatedIndex&quot;: 6
 }</component>
   <component name="ProjectId" id="3BwtNgSvPV7dKvSPCwobLUDgOk6" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
@@ -45,6 +79,11 @@
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$" />
+    </key>
+  </component>
   <component name="RunManager">
     <configuration name="uvicorn" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <module name="BatchBook" />
@@ -87,6 +126,30 @@
       <updated>1775411922786</updated>
       <workItem from="1775411923707" duration="11000" />
     </task>
+    <task id="LOCAL-00001" summary="projects fisrt commit.">
+      <option name="closed" value="true" />
+      <created>1775415307134</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1775415307134</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="projects fisrt commit." />
+    <option name="LAST_COMMIT_MESSAGE" value="projects fisrt commit." />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/routes/student_route.py</url>
+          <line>19</line>
+          <option name="timeStamp" value="7" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
 </project>
