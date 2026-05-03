@@ -62,6 +62,11 @@ class StudentService:
         response = await supabase.auth.get_user(token)
         return UUID(str(response.user.id))
 
+    async def get_student_by_user_id(
+        self, db: AsyncSession, user_id: UUID
+    ) -> StudentSchema | None:
+        return await self.student_repo.get_by_user_id(db, user_id)
+
     async def update_student(
         self, db: AsyncSession, user_id: UUID, updates: dict
     ) -> StudentSchema | None:
