@@ -49,7 +49,7 @@ class StudentService:
             "phone": f"+91{phone}",
             "token": token,
             "type": "sms",
-        }, None, )
+        })
         if not data.user or not data.session:
             raise ValueError("OTP verification failed")
         user_id = UUID(str(data.user.id))
