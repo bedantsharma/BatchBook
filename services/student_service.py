@@ -35,6 +35,33 @@ class StudentService:
         )
         return await self.student_repo.create_student(db, student)
 
+    async def verify_otp(
+        self,
+        supabase,
+        db: AsyncSession,
+        phone: str,
+        token: str,
+        name: str | None,
+        email: str | None,
+    ) -> tuple[str, str, UUID]:
+        """Verify the OTP with Supabase, upsert the student, and return (access_token, aud, user_id)."""
+        data = await supabase.auth.verify_otp({
+            "phone": f"+91{phone}",
+            "token": token,
+            "type": "sms",
+        })
+        if not data.user or not data.session:
+            raise ValueError("OTP verification failed")
+        user_id = UUID(str(data.user.id))
+        await self.get_or_create_after_otp(db, user_id, phone, name, email)
+        return data.session.access_token, data.user.aud, user_id
+
+    async def get_current_user_id(self, supabase, authorization: str) -> UUID:
+        """Validate the Bearer token and return the authenticated user's UUID."""
+        token = authorization.removeprefix("Bearer ").strip()
+        response = await supabase.auth.get_user(token)
+        return UUID(str(response.user.id))
+
     async def update_student(
         self, db: AsyncSession, user_id: UUID, updates: dict
     ) -> StudentSchema | None:
