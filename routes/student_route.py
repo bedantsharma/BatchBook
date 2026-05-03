@@ -104,8 +104,8 @@ async def verify_otp(
     response_model=StudentProfileResponse,
 )
 async def get_student(
+    student_service: StudentServiceDep,
     db: AsyncSession = Depends(get_db),
-    student_service: StudentServiceDep = None,
     user_id: UUID = Depends(_get_current_user_id),
 ):
     student = await student_service.get_student_by_user_id(db=db, user_id=user_id)
