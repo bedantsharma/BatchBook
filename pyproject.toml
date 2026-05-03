@@ -20,4 +20,32 @@ dependencies = [
     "asyncpg>=0.31.0",
     "loguru>=0.7.3",
     "supabase>=2.28.3",
+    "ruff>=0.15.12",
 ]
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+# Rules to enable
+select = [
+    "E", "F", "I",     # core lint + imports
+    "B",               # bugbear
+    "UP",              # pyupgrade
+    "N",               # naming
+]
+
+# Let formatter handle line length
+ignore = ["E501"]
+
+# Auto-fix enabled
+fix = true
+
+# Exclude migrations (important for Alembic)
+exclude = [
+    "migrations",
+    "alembic",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
