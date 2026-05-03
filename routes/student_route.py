@@ -9,8 +9,7 @@ from supabase import AsyncClient
 from clients.supabase_client import get_supabase_client
 from db.session import get_db
 from DTO.student_model import Student
-from services.student_service import StudentService
-
+from services.student_service import StudentService, get_student_service
 from .requests.otp_generate_request import OtpGenerateRequest
 from .requests.otp_verify_request import OtpVerifyRequest
 from .requests.update_student_request import UpdateStudentRequest
@@ -19,12 +18,6 @@ from .responses.verify_user_response import VerifyUserResponse
 router = APIRouter(prefix="/student")
 
 SupabaseClient = Annotated[AsyncClient, Depends(get_supabase_client)]
-
-
-def get_student_service() -> StudentService:
-    return StudentService()
-
-
 StudentServiceDep = Annotated[StudentService, Depends(get_student_service)]
 
 
@@ -45,8 +38,8 @@ async def _get_current_user_id(
 )
 async def create_user(
     user: Student,
+    student_service: StudentServiceDep,
     db: AsyncSession = Depends(get_db),
-    student_service: StudentServiceDep = None,
 ):
     logger.info(f"create user called with {user}")
     return await student_service.create_student(data=user, db=db)
@@ -74,9 +67,9 @@ async def send_otp(request: OtpGenerateRequest, supabase: SupabaseClient):
 )
 async def verify_otp(
     verify_request: OtpVerifyRequest,
+    student_service: StudentServiceDep,
     supabase: SupabaseClient,
     db: AsyncSession = Depends(get_db),
-    student_service: StudentServiceDep = None,
 ):
     try:
         access_token, aud, user_id = await student_service.verify_otp(

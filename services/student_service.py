@@ -49,7 +49,7 @@ class StudentService:
             "phone": f"+91{phone}",
             "token": token,
             "type": "sms",
-        })
+        }, None, )
         if not data.user or not data.session:
             raise ValueError("OTP verification failed")
         user_id = UUID(str(data.user.id))
@@ -69,3 +69,6 @@ class StudentService:
         if not student:
             return None
         return await self.student_repo.update_student(db, student, updates)
+
+def get_student_service() -> StudentService:
+    return StudentService()
