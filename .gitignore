@@ -9,3 +9,8 @@ wheels/
 # Virtual environments
 .venv
 .env
+.gitnexus
+
+# IDE
+.idea/
+.idea/*

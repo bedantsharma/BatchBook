@@ -1,14 +1,9 @@
-from typing import AsyncGenerator
+from supabase._async.client import AsyncClient
 
-from supabase._async.client import AsyncClient, create_client
-from core.config import get_settings
+# 1. Define a global client variable
+supabase: AsyncClient = None
 
-async def get_supabase_client() -> AsyncGenerator[AsyncClient, None]:
-    client: AsyncClient = await create_client(
-        get_settings().supabase_url,
-        get_settings().supabase_key
-    )
-    try:
-        yield client
-    finally:
-        await client.auth.sign_out()  # cleanup
+
+# 4. Dependency simply returns the existing client
+async def get_supabase_client() -> AsyncClient:
+    return supabase
