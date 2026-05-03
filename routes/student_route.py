@@ -13,6 +13,7 @@ from services.student_service import StudentService, get_student_service
 from .requests.otp_generate_request import OtpGenerateRequest
 from .requests.otp_verify_request import OtpVerifyRequest
 from .requests.update_student_request import UpdateStudentRequest
+from .responses.student_profile_response import StudentProfileResponse
 from .responses.verify_user_response import VerifyUserResponse
 
 router = APIRouter(prefix="/student")
@@ -89,6 +90,28 @@ async def verify_otp(
             detail="Could not communicate with Supabase server — check logs",
         )
     return VerifyUserResponse(auth_token=access_token, aud=aud, user_id=str(user_id))
+
+
+@router.get(
+    "/me",
+    summary="Fetch the authenticated student's profile",
+    description=(
+        "Returns the full student record for the currently authenticated user. "
+        "Authentication is performed by validating the Bearer JWT with Supabase Auth. "
+        # TODO: replace supabase.auth.get_user() call with local JWT verification using
+        #       the Supabase JWT secret to avoid the round-trip to Supabase on every request.
+    ),
+    response_model=StudentProfileResponse,
+)
+async def get_student(
+    db: AsyncSession = Depends(get_db),
+    student_service: StudentServiceDep = None,
+    user_id: UUID = Depends(_get_current_user_id),
+):
+    student = await student_service.get_student_by_user_id(db=db, user_id=user_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="Student record not found")
+    return student
 
 
 @router.patch(
