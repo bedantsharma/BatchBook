@@ -5,19 +5,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="82e19332-035b-4e83-a1fe-096a15cf455d" name="Changes" comment="some changes in the workspace.xml file.">
-      <change afterPath="$PROJECT_DIR$/alembic/versions/292a642bc3e5_added_user_id_column_to_the_database.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/alembic/versions/b683bc8c3be4_added_user_id_column_to_the_database.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/routes/responses/verify_user_response.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/alembic/env.py" beforeDir="false" afterPath="$PROJECT_DIR$/alembic/env.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/clients/supabase_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/clients/supabase_client.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/core/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/core/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/db/session.py" beforeDir="false" afterPath="$PROJECT_DIR$/db/session.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/student_base.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/student_base.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AGENTS.md" beforeDir="false" afterPath="$PROJECT_DIR$/AGENTS.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/repositories/student_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/repositories/student_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/routes/requests/otp_verify_request.py" beforeDir="false" afterPath="$PROJECT_DIR$/routes/requests/otp_verify_request.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/routes/student_route.py" beforeDir="false" afterPath="$PROJECT_DIR$/routes/student_route.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/student_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/student_service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -150,7 +144,15 @@
       <option name="project" value="LOCAL" />
       <updated>1776225297699</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="some changes in the workspace.xml file.">
+      <option name="closed" value="true" />
+      <created>1777822476080</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1777822476080</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -164,7 +166,7 @@
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/routes/student_route.py</url>
-          <line>22</line>
+          <line>39</line>
           <option name="timeStamp" value="7" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
