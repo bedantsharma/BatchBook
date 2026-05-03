@@ -4,14 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="82e19332-035b-4e83-a1fe-096a15cf455d" name="Changes" comment="some changes in the workspace.xml file.">
+    <list default="true" id="82e19332-035b-4e83-a1fe-096a15cf455d" name="Changes" comment="added logic to save user on verify otp call.">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AGENTS.md" beforeDir="false" afterPath="$PROJECT_DIR$/AGENTS.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/repositories/student_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/repositories/student_repository.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routes/requests/otp_verify_request.py" beforeDir="false" afterPath="$PROJECT_DIR$/routes/requests/otp_verify_request.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/routes/student_route.py" beforeDir="false" afterPath="$PROJECT_DIR$/routes/student_route.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/student_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/student_service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -152,14 +146,23 @@
       <option name="project" value="LOCAL" />
       <updated>1777822476080</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="added logic to save user on verify otp call.">
+      <option name="closed" value="true" />
+      <created>1777826232701</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1777826232701</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="projects fisrt commit." />
     <MESSAGE value="otp verificaiton calls" />
     <MESSAGE value="some changes in the workspace.xml file." />
-    <option name="LAST_COMMIT_MESSAGE" value="some changes in the workspace.xml file." />
+    <MESSAGE value="added logic to save user on verify otp call." />
+    <option name="LAST_COMMIT_MESSAGE" value="added logic to save user on verify otp call." />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
