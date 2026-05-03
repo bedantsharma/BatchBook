@@ -1,7 +1,8 @@
+from typing import Annotated
 from fastapi import APIRouter, Depends
 from loguru import logger
-from supabase import AsyncClient
 from fastapi import HTTPException
+from supabase import AsyncClient
 from.requests.otp_generate_request import OtpGenerateRequest
 from .requests.otp_verify_request import OtpVerifyRequest
 from services.student_service import StudentService
@@ -9,11 +10,13 @@ from DTO.student_model import Student
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.session import get_db
 from clients.supabase_client import get_supabase_client
-from typing import Annotated
+
+
 router = APIRouter(
     prefix="/student",
 )
 
+SupabaseClient = Annotated[AsyncClient,Depends(get_supabase_client)]
 
 @router.post("/")
 async def create_user(user: Student, db: AsyncSession= Depends(get_db)):
@@ -25,7 +28,7 @@ async def create_user(user: Student, db: AsyncSession= Depends(get_db)):
 @router.post("/generate_otp")
 async def send_otp(
             request: OtpGenerateRequest,
-            supabase: Annotated[AsyncClient, Depends(get_supabase_client)],
+            supabase: SupabaseClient,
             summary= "generate otp for the given phone number"
     ):
     try:
@@ -36,12 +39,13 @@ async def send_otp(
 
     except Exception as e:
         logger.error(e)
-        return HTTPException(status_code=500,detail="could not communicate with supabase server properly check the logs")
+        raise HTTPException(status_code=500,detail="could not communicate with supabase server properly check the logs")
 
 @router.post("/verif_otp")
 async def verify_otp(
         verify_request: OtpVerifyRequest,
-        supabase: Annotated[AsyncClient, Depends(get_supabase_client)],
+        supabase: SupabaseClient,
+        db: AsyncSession= Depends(get_db),
         summary = "verify otp code"
     ):
     try:
@@ -50,7 +54,8 @@ async def verify_otp(
             "token": verify_request.token,
             "type":"sms"
         })
+        create_user(data,db=db)
         return data
     except Exception as e:
         logger.error(e)
-        return HTTPException(status_code=500, detail="could not communicate with supabase server properly check the logs")
+        raise HTTPException(status_code=500, detail="could not communicate with supabase server properly check the logs")
