@@ -1,12 +1,13 @@
-from typing import Optional
 from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from models.student_base import StudentSchema
+
 from DTO.student_model import Student, StudentFeesStatus
+from models.student_base import StudentSchema
 from repositories.student_repository import StudentRepository
 
 
-class StudentService():
+class StudentService:
     def __init__(self):
         self.student_repo = StudentRepository()
 
@@ -19,8 +20,8 @@ class StudentService():
         db: AsyncSession,
         user_id: UUID,
         phone: str,
-        name: Optional[str],
-        email: Optional[str],
+        name: str | None,
+        email: str | None,
     ) -> StudentSchema:
         existing = await self.student_repo.get_by_user_id(db, user_id)
         if existing:

@@ -1,18 +1,20 @@
 from typing import Annotated
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, Header, HTTPException
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 from supabase import AsyncClient
+
+from clients.supabase_client import get_supabase_client
+from db.session import get_db
+from DTO.student_model import Student
+from services.student_service import StudentService
+
 from .requests.otp_generate_request import OtpGenerateRequest
 from .requests.otp_verify_request import OtpVerifyRequest
 from .requests.update_student_request import UpdateStudentRequest
 from .responses.verify_user_response import VerifyUserResponse
-from services.student_service import StudentService
-from DTO.student_model import Student
-from sqlalchemy.ext.asyncio import AsyncSession
-from db.session import get_db
-from clients.supabase_client import get_supabase_client
-
 
 router = APIRouter(prefix="/student")
 
@@ -48,9 +50,11 @@ async def create_user(user: Student, db: AsyncSession = Depends(get_db)):
 )
 async def send_otp(request: OtpGenerateRequest, supabase: SupabaseClient):
     try:
-        data = await supabase.auth.sign_in_with_otp({
-            "phone": f"+91{request.phone}",
-        })
+        data = await supabase.auth.sign_in_with_otp(
+            {
+                "phone": f"+91{request.phone}",
+            }
+        )
         return data
     except Exception as e:
         logger.error(e)
@@ -71,11 +75,13 @@ async def verify_otp(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        data = await supabase.auth.verify_otp({
-            "phone": f"+91{verify_request.phone}",
-            "token": verify_request.token,
-            "type": "sms",
-        })
+        data = await supabase.auth.verify_otp(
+            {
+                "phone": f"+91{verify_request.phone}",
+                "token": verify_request.token,
+                "type": "sms",
+            }
+        )
     except Exception as e:
         logger.error(e)
         raise HTTPException(

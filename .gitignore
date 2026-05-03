@@ -13,3 +13,4 @@ wheels/
 
 # IDE
 .idea/
+.idea/*
