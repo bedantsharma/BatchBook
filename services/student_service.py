@@ -1,10 +1,12 @@
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
 from DTO.student_model import Student, StudentFeesStatus
 from models.student_base import StudentSchema
 from repositories.student_repository import StudentRepository
+from services.auth_service import get_current_user_id as _get_user_id
 
 
 class StudentService:
@@ -56,11 +58,8 @@ class StudentService:
         await self.get_or_create_after_otp(db, user_id, phone, name, email)
         return data.session.access_token, data.user.aud, user_id
 
-    async def get_current_user_id(self, supabase, authorization: str) -> UUID:
-        """Validate the Bearer token and return the authenticated user's UUID."""
-        token = authorization.removeprefix("Bearer ").strip()
-        response = await supabase.auth.get_user(token)
-        return UUID(str(response.user.id))
+    async def get_current_user_id(self, supabase: AsyncClient, authorization: str) -> UUID:
+        return await _get_user_id(supabase, authorization)
 
     async def get_student_by_user_id(
         self, db: AsyncSession, user_id: UUID
