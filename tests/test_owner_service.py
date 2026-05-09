@@ -74,13 +74,14 @@ async def test_verify_otp_returns_token_aud_and_teacher_id(service, mock_db, moc
     teacher_id = uuid4()
     mock_supabase.auth.verify_otp = AsyncMock(return_value=MagicMock(
         user=MagicMock(id=str(teacher_id), aud="authenticated"),
-        session=MagicMock(access_token="tok_abc123"),
+        session=MagicMock(access_token="tok_abc123", refresh_token="ref_xyz789"),
     ))
 
     with patch.object(service, "get_or_create_after_otp", new=AsyncMock()):
-        token, aud, tid = await service.verify_otp(mock_supabase, mock_db, "9876543210", "123456", "Alice", None)
+        token, refresh_token, aud, tid = await service.verify_otp(mock_supabase, mock_db, "9876543210", "123456", "Alice", None)
 
     assert token == "tok_abc123"
+    assert refresh_token == "ref_xyz789"
     assert aud == "authenticated"
     assert tid == teacher_id
 

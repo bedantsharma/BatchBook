@@ -78,7 +78,7 @@ async def test_generate_otp_rejects_invalid_phone(client):
 async def test_verify_otp_returns_token_on_success(client):
     teacher_id = uuid4()
     mock_service = MagicMock(spec=OwnerService)
-    mock_service.verify_otp = AsyncMock(return_value=("tok_abc_1234567890", "authenticated", teacher_id))
+    mock_service.verify_otp = AsyncMock(return_value=("tok_abc_1234567890", "ref_xyz_1234567890", "authenticated", teacher_id))
 
     from app import app
     app.dependency_overrides[get_owner_service] = lambda: mock_service
@@ -92,6 +92,7 @@ async def test_verify_otp_returns_token_on_success(client):
     assert response.status_code == 200
     body = response.json()
     assert body["auth_token"] == "tok_abc_1234567890"
+    assert body["refresh_token"] == "ref_xyz_1234567890"
     assert body["aud"] == "authenticated"
     assert body["teacher_id"] == str(teacher_id)
 
