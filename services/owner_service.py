@@ -34,7 +34,7 @@ class OwnerService:
         token: str,
         name: str | None,
         email: str | None,
-    ) -> tuple[str, str, UUID]:
+    ) -> tuple[str, str, str, UUID]:
         data = await supabase.auth.verify_otp({
             "phone": f"+91{phone}",
             "token": token,
@@ -44,7 +44,7 @@ class OwnerService:
             raise ValueError("OTP verification failed")
         teacher_id = UUID(str(data.user.id))
         await self.get_or_create_after_otp(db, teacher_id, phone, name, email)
-        return data.session.access_token, data.user.aud, teacher_id
+        return data.session.access_token, data.session.refresh_token, data.user.aud, teacher_id
 
     async def get_current_teacher_id(self, supabase: AsyncClient, authorization: str) -> UUID:
         return await get_current_user_id(supabase, authorization)

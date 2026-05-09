@@ -5,12 +5,14 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase import AsyncClient
+from supabase_auth.errors import AuthApiError
 
 from clients.supabase_client import get_supabase_client
 from db.session import get_db
 from services.owner_service import OwnerService, get_owner_service
 from routes.requests.otp_generate_request import OtpGenerateRequest
 from routes.requests.owner_verify_otp_request import OwnerVerifyOtpRequest
+from routes.requests.refresh_token_request import RefreshTokenRequest
 from routes.requests.update_owner_request import UpdateOwnerRequest
 from routes.responses.owner_profile_response import OwnerProfileResponse
 from routes.responses.verify_owner_response import VerifyOwnerResponse
@@ -34,7 +36,7 @@ async def _get_current_teacher_id(
 
 @router.post(
     "/generate_otp",
-    summary="Send an OTP to the given Indian mobile number (owner login)",
+    summary="Send an OTP to  ithe given Indian mobile number (owner login)",
 )
 async def send_otp(request: OtpGenerateRequest, supabase: SupabaseClient):
     try:
@@ -59,7 +61,7 @@ async def verify_otp(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        access_token, aud, teacher_id = await owner_service.verify_otp(
+        access_token, refresh_token, aud, teacher_id = await owner_service.verify_otp(
             supabase=supabase,
             db=db,
             phone=verify_request.phone,
@@ -67,7 +69,7 @@ async def verify_otp(
             name=verify_request.name,
             email=verify_request.email,
         )
-    except ValueError as e:
+    except (ValueError, AuthApiError) as e:
         raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:
         logger.error(e)
@@ -75,7 +77,7 @@ async def verify_otp(
             status_code=500,
             detail="Could not communicate with Supabase server — check logs",
         )
-    return VerifyOwnerResponse(auth_token=access_token, aud=aud, teacher_id=str(teacher_id))
+    return VerifyOwnerResponse(auth_token=access_token, refresh_token=refresh_token, aud=aud, teacher_id=str(teacher_id))
 
 
 @router.get(
@@ -92,6 +94,27 @@ async def get_owner(
     if not owner:
         raise HTTPException(status_code=404, detail="Owner record not found")
     return owner
+
+
+@router.post(
+    "/refresh",
+    summary="Exchange a refresh token for a new access token + refresh token pair",
+    response_model=VerifyOwnerResponse,
+)
+async def refresh_token(request: RefreshTokenRequest, supabase: SupabaseClient):
+    try:
+        data = await supabase.auth.refresh_session(request.refresh_token)
+    except Exception as e:
+        logger.error(e)
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+    if not data.user or not data.session:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+    return VerifyOwnerResponse(
+        auth_token=data.session.access_token,
+        refresh_token=data.session.refresh_token,
+        aud=data.user.aud,
+        teacher_id=str(data.user.id),
+    )
 
 
 @router.patch(

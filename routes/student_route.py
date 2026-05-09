@@ -12,6 +12,7 @@ from DTO.student_model import Student
 from services.student_service import StudentService, get_student_service
 from .requests.otp_generate_request import OtpGenerateRequest
 from .requests.otp_verify_request import OtpVerifyRequest
+from .requests.refresh_token_request import RefreshTokenRequest
 from .requests.update_student_request import UpdateStudentRequest
 from .responses.student_profile_response import StudentProfileResponse
 from .responses.verify_user_response import VerifyUserResponse
@@ -73,7 +74,7 @@ async def verify_otp(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        access_token, aud, user_id = await student_service.verify_otp(
+        access_token, refresh_token, aud, user_id = await student_service.verify_otp(
             supabase=supabase,
             db=db,
             phone=verify_request.phone,
@@ -89,7 +90,7 @@ async def verify_otp(
             status_code=500,
             detail="Could not communicate with Supabase server — check logs",
         )
-    return VerifyUserResponse(auth_token=access_token, aud=aud, user_id=str(user_id))
+    return VerifyUserResponse(auth_token=access_token, refresh_token=refresh_token, aud=aud, user_id=str(user_id))
 
 
 @router.get(
@@ -112,6 +113,27 @@ async def get_student(
     if not student:
         raise HTTPException(status_code=404, detail="Student record not found")
     return student
+
+
+@router.post(
+    "/refresh",
+    summary="Exchange a refresh token for a new access token + refresh token pair",
+    response_model=VerifyUserResponse,
+)
+async def refresh_token(request: RefreshTokenRequest, supabase: SupabaseClient):
+    try:
+        data = await supabase.auth.refresh_session(request.refresh_token)
+    except Exception as e:
+        logger.error(e)
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+    if not data.user or not data.session:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+    return VerifyUserResponse(
+        auth_token=data.session.access_token,
+        refresh_token=data.session.refresh_token,
+        aud=data.user.aud,
+        user_id=str(data.user.id),
+    )
 
 
 @router.patch(

@@ -17,10 +17,6 @@ async def lifespan(app: FastAPI):
         get_settings().supabase_url, get_settings().supabase_key
     )
     yield
-    # 3. Cleanup once on shutdown
-    await (
-        supabase_client.supabase.auth.sign_out()
-    )  # Optional, usually not needed for service clients
 
 
 app = FastAPI(
