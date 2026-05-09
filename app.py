@@ -1,11 +1,13 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from supabase._async.client import create_client
 
 from clients import supabase_client
 from config import get_settings
 from routes.student_route import router as student_router
+from routes.owner_route import router as owner_router
 
 
 @asynccontextmanager
@@ -15,10 +17,6 @@ async def lifespan(app: FastAPI):
         get_settings().supabase_url, get_settings().supabase_key
     )
     yield
-    # 3. Cleanup once on shutdown
-    await (
-        supabase_client.supabase.auth.sign_out()
-    )  # Optional, usually not needed for service clients
 
 
 app = FastAPI(
@@ -34,4 +32,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173","http://localhost:5174","http://localhost:5175","https://68cd-2409-40d0-14e9-3bec-b1-11ec-46fe-8ef7.ngrok-free.app"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(router=student_router)
+app.include_router(router=owner_router)
