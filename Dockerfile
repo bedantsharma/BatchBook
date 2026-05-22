@@ -12,6 +12,18 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uvx /usr/local/bin/uvx
 
 WORKDIR /app
 
+# Install C build tools required by packages with native extensions.
+# pyiceberg (pulled in via supabase → storage3) depends on pyarrow which has
+# no pre-built wheels for Python 3.14 yet and must compile from source.
+# --no-install-recommends keeps the image lean; cache is cleared in the same
+# layer to avoid bloating the image.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy dependency manifests first for layer-cache efficiency
 COPY pyproject.toml uv.lock ./
 
