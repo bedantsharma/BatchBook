@@ -4,10 +4,14 @@ services:
 
   # ── FastAPI backend ─────────────────────────────────────────────
   backend:
+    image: batchbook-backend:prod        # named image = reusable cache source
     build:
       context: .
       dockerfile: Dockerfile
-      target: prod                     # baked-in source, 2 uvicorn workers
+      target: prod                       # baked-in source, 2 uvicorn workers
+      cache_from:
+        - batchbook-backend:dev          # share base + dep layers with the dev image
+        - batchbook-backend:prod         # reuse layers from the last prod build
     ports:
       - "8000:8000"
     env_file:
@@ -18,10 +22,14 @@ services:
 
   # ── React / nginx frontend ──────────────────────────────────────
   frontend:
+    image: batchbook-frontend:prod       # named image = reusable cache source
     build:
       context: ./batchbookui
       dockerfile: Dockerfile
-      target: prod                     # Vite build → nginx
+      target: prod                       # Vite build → nginx
+      cache_from:
+        - batchbook-frontend:dev         # share base + dep layers with the dev image
+        - batchbook-frontend:prod        # reuse layers from the last prod build
       args:
         # Baked into the JS bundle at build time.
         # In prod, nginx proxies /student/* and /owner/* directly (see nginx.conf),

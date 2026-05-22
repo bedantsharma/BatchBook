@@ -18,8 +18,10 @@ COPY pyproject.toml uv.lock ./
 # ── Dev stage ─────────────────────────────────────────────────────
 FROM base AS dev
 
-# Install all deps (including dev: pytest, ruff, etc.)
-RUN uv sync --frozen
+# --mount=type=cache keeps the uv download cache on the host between builds.
+# Packages that haven't changed are never re-downloaded, even when uv.lock changes.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen
 
 # Source code is volume-mounted at runtime, not baked in
 EXPOSE 8000
@@ -29,8 +31,9 @@ CMD ["uv", "run", "uvicorn", "app:app", \
 # ── Prod stage ────────────────────────────────────────────────────
 FROM base AS prod
 
-# Install production deps only (no pytest/ruff etc.)
-RUN uv sync --frozen --no-dev
+# Same cache mount — prod deps re-use the same host cache as dev
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
 # Bake in source code
 COPY . .

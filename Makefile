@@ -19,6 +19,10 @@
 #    make backend  MODE=prod
 # ─────────────────────────────────────────────────────────────────
 
+# ── BuildKit — must be on for --mount=type=cache in Dockerfiles to work ──────
+export DOCKER_BUILDKIT       := 1
+export COMPOSE_DOCKER_CLI_BUILD := 1
+
 # Default mode for single-service commands (make frontend / make backend)
 MODE ?= dev
 COMPOSE_FILE = docker-compose.$(MODE).yml
