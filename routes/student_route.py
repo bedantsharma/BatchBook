@@ -88,7 +88,7 @@ async def verify_otp(
         logger.error(e)
         raise HTTPException(
             status_code=500,
-            detail="Could not send otp please try again after some time.",
+            detail="OTP verification failed due to a server error — check backend logs.",
         )
     return VerifyUserResponse(auth_token=access_token, refresh_token=refresh_token, aud=aud, user_id=str(user_id))
 

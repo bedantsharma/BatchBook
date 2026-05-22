@@ -47,11 +47,14 @@ class StudentService:
         email: str | None,
     ) -> tuple[str, str, str, UUID]:
         """Verify the OTP with Supabase, upsert the student, and return (access_token, refresh_token, aud, user_id)."""
-        data = await supabase.auth.verify_otp({
-            "phone": f"+91{phone}",
-            "token": token,
-            "type": "sms",
-        })
+        try:
+            data = await supabase.auth.verify_otp({
+                "phone": f"+91{phone}",
+                "token": token,
+                "type": "sms",
+            })
+        except Exception as e:
+            raise ValueError(str(e)) from e
         if not data.user or not data.session:
             raise ValueError("OTP verification failed")
         user_id = UUID(str(data.user.id))
