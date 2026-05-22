@@ -81,15 +81,25 @@ A vertical SaaS product for India's small coaching institutes (tuition centers w
 ### Database Relationships (read this before touching any models)
 
 ```
-Owner ──────────── Institute (one owner has one institute)
-Institute ─────── Batch (one institute has many batches, e.g. "Class 10 Maths 4PM")
-Batch ─────────── Enrollment (one batch has many enrollments)
-Student ────────── Enrollment (one student can be in multiple batches)
-Batch ─────────── FeeStructure (one batch has one fee config, e.g. ₹1500/month due on 5th)
-Enrollment ─────── FeeRecord (one enrollment has one fee record per month)
-Batch ─────────── ClassSession (one batch has many class sessions, one per day taught)
-ClassSession ───── Attendance (one session has one attendance row per enrolled student)
+Owner ──────────────── Institute (one owner has one institute)
+Institute ──────────── Teacher (one institute has many teachers; owner invites via phone → OTP)
+Institute ──────────── Batch (one institute has many batches, e.g. "Class 10 Maths 4PM")
+Batch ──────────────── BatchTeacher (many-to-many: two teachers can share one batch)
+Teacher ────────────── BatchTeacher
+Batch ──────────────── Enrollment (one batch has many enrollments)
+Parent ──────────────── Student (one parent can have multiple children enrolled; parent holds phone + auth)
+Student ────────────── Enrollment (one student can be in multiple batches)
+Enrollment ─────────── FeeRecord (one enrollment has one fee record per month)
+Batch ──────────────── FeeStructure (one batch has one fee structure — monthly amount only)
+Batch ──────────────── ClassSession (one batch has many class sessions)
+ClassSession ────────── Attendance (one session has one attendance row per enrolled student)
 ```
+
+**Key design decisions:**
+- `Parent` holds the phone number and Supabase auth — the "student app" is actually a parent app. One parent can see all their children.
+- `due_day` and `first_month_amount` live on `Enrollment`, not `FeeStructure` — students joining mid-month each have their own due date.
+- `BatchTeacher` is a join table — a teacher can teach multiple batches, a batch can have multiple teachers.
+- `Batch.status` lifecycle: `ACTIVE → CLOSING` (auto, when end_date passes) `→ ARCHIVED` (manual, only when all fee records settled).
 
 ---
 
@@ -111,9 +121,9 @@ ClassSession ───── Attendance (one session has one attendance row per 
 
 ## PHASE 1 — Foundation (Weeks 1–3)
 
-**What we're doing:** Rip out Firebase from the frontend, plug in Supabase instead, create the Owner model in the backend so a teacher can actually log in, and build the bare skeleton of the owner dashboard.
+**What we're doing:** Rip out Firebase from the frontend, plug in Supabase instead, create the Owner + Parent + Teacher models in the backend, and build the bare skeleton of the owner dashboard.
 
-**Why this must come first:** Every other feature needs an authenticated owner. You can't build fee collection for "Sharma Classes" if Sharma sir can't log in. And Firebase + Supabase doing the same job is a bug waiting to happen — one auth source of truth.
+**Why this must come first:** Every other feature needs authenticated users. The Owner model lets the institute owner log in. The Parent model correctly handles the student-app login (parents log in, see their children). The Teacher model lets hired teachers mark attendance independently. Firebase + Supabase doing the same job is a bug waiting to happen — one auth source of truth.
 
 ---
 
@@ -123,7 +133,7 @@ ClassSession ───── Attendance (one session has one attendance row per 
 
 **Why Owner model:** The `Student` model already exists for students. Owners are different — they have an institute name, a city, and they authenticate separately from students.
 
-- [ ] **Add CORS to `app.py`**
+- [x] **Add CORS to `app.py`**
   Open `BatchBook/app.py`. Import `CORSMiddleware` from `fastapi.middleware.cors` and add:
   ```python
   from fastapi.middleware.cors import CORSMiddleware
@@ -136,11 +146,11 @@ ClassSession ───── Attendance (one session has one attendance row per 
   )
   ```
 
-- [ ] **Create `BatchBook/models/owner_base.py`**
+- [x] **Create `BatchBook/models/owner_base.py`**
   Mirror the pattern of `models/student_base.py`. The Owner table needs:
   `id` (int, PK), `name` (str), `phone_number` (str, unique), `user_id` (UUID string, unique — this links to Supabase Auth), `institute_name` (str, nullable for now), `city` (str, nullable), `created_at` (datetime)
 
-- [ ] **Create Alembic migration**
+- [x] **Create Alembic migration**
   From the `BatchBook/` directory, run:
   ```bash
   alembic revision --autogenerate -m "add owner table"
@@ -148,11 +158,11 @@ ClassSession ───── Attendance (one session has one attendance row per 
   ```
   Then verify the table exists in your Supabase dashboard.
 
-- [ ] **Create `BatchBook/repositories/owner_repository.py`**
+- [x] **Create `BatchBook/repositories/owner_repository.py`**
   Copy the pattern from `repositories/student_repository.py`. You need four functions:
   `create_owner(db, owner_data)`, `get_by_user_id(db, user_id)`, `get_by_phone(db, phone)`, `update_owner(db, owner, updates)`
 
-- [ ] **Create `BatchBook/services/owner_service.py`**
+- [x] **Create `BatchBook/services/owner_service.py`**
   Copy the OTP logic from `services/student_service.py`. The key methods:
   - `generate_otp(phone)` — calls Supabase to send SMS
   - `verify_otp(phone, token, name)` — verifies with Supabase, upserts owner record, returns JWT
@@ -160,25 +170,25 @@ ClassSession ───── Attendance (one session has one attendance row per 
   
   The `get_current_user_id` function in `student_service.py` can be extracted to a shared utility so you don't duplicate it. Put it in a new `services/auth_service.py`.
 
-- [ ] **Create `BatchBook/routes/owner_route.py`** with 4 endpoints:
+- [x] **Create `BatchBook/routes/owner_route.py`** with 4 endpoints:
   - `POST /owner/generate_otp` — body: `{ phone: "9876543210" }`
   - `POST /owner/verify_otp` — body: `{ phone, token, name }`
   - `GET /owner/me` — requires `Authorization: Bearer <token>` header
   - `PATCH /owner/update` — body: `{ name, institute_name, city }` (all optional)
 
-- [ ] **Register router in `app.py`**
+- [x] **Register router in `app.py`**
   ```python
   from routes.owner_route import router as owner_router
   app.include_router(owner_router, prefix="/owner", tags=["owner"])
   ```
 
-- [ ] **Smoke test:** Use the FastAPI `/docs` page (`http://localhost:8000/docs`) to send OTP to your phone and verify it. You should get back a JWT token.
+- [x] **Smoke test:** Use the FastAPI `/docs` page (`http://localhost:8000/docs`) to send OTP to your phone and verify it. You should get back a JWT token.
 
 ---
 
 ### Task 1.2 — Backend: Institute model
 
-**Why:** An owner has one institute (e.g., "Sharma Classes, Gurugram"). All batches, students, and fees are scoped to an institute. This is the top-level container for everything.
+**Why:** An owner has one institute (e.g., "Sharma Classes, Gurugram"). All batches, students, teachers, and fees are scoped to an institute. This is the top-level container for everything.
 
 - [ ] **Create `BatchBook/models/institute_base.py`**
   Fields: `id` (int, PK), `owner_id` (FK → owner.id), `name` (str), `city` (str), `created_at` (datetime)
@@ -198,11 +208,72 @@ ClassSession ───── Attendance (one session has one attendance row per 
 
 ---
 
-### Task 1.3 — Frontend: Remove Firebase, add Supabase
+### Task 1.3 — Backend: Parent model + refactor Student model
+
+**Why:** The "student app" is a parent app. The parent logs in with their phone, sees all their children's data. This also handles siblings — two children from the same family share one parent account without conflicting on phone number uniqueness.
+
+- [ ] **Create `BatchBook/models/parent_base.py`**
+  Fields: `id` (int, PK), `name` (str), `phone_number` (str, unique), `user_id` (UUID, unique — Supabase Auth), `created_at` (datetime)
+
+- [ ] **Refactor `BatchBook/models/student_base.py`**
+  - Remove `phone_number` field (moves to Parent)
+  - Remove `user_id` field (moves to Parent)
+  - Add `parent_id` (FK → parent.id)
+  - Keep: `id`, `name`, `institute_id` (nullable FK), `created_at`
+
+- [ ] **Create migration and run it**
+  ```bash
+  alembic revision --autogenerate -m "add parent table and refactor student"
+  alembic upgrade head
+  ```
+
+- [ ] **Create `BatchBook/repositories/parent_repository.py`**
+  Functions: `create_parent(db, data)`, `get_by_user_id(db, user_id)`, `get_by_phone(db, phone)`, `get_students_by_parent_id(db, parent_id)`
+
+- [ ] **Refactor `BatchBook/services/student_service.py`**
+  The `verify_otp` flow now upserts a `Parent` record (not Student). After OTP verification the parent is logged in and can see all their children.
+
+- [ ] **Update student auth routes** — `POST /student/verify_otp` now returns the parent's JWT and a list of their children.
+
+---
+
+### Task 1.4 — Backend: Teacher model + auth
+
+**Why:** Teachers log in independently to mark attendance for their assigned batches. The owner creates a teacher account by entering name + phone — the teacher then receives an OTP to activate their login. Teachers can only access batches assigned to them.
+
+- [ ] **Create `BatchBook/models/teacher_base.py`**
+  Fields: `id` (int, PK), `institute_id` (FK → institute.id), `name` (str), `phone_number` (str, unique), `user_id` (UUID, unique — Supabase Auth), `created_at` (datetime)
+
+- [ ] **Create migration and run it**
+  ```bash
+  alembic revision --autogenerate -m "add teacher table"
+  alembic upgrade head
+  ```
+
+- [ ] **Create `BatchBook/repositories/teacher_repository.py`**
+  Functions: `create(db, data)`, `get_by_user_id(db, user_id)`, `get_by_phone(db, phone)`, `get_by_institute_id(db, institute_id)`, `update(db, teacher, updates)`
+
+- [ ] **Create `BatchBook/services/teacher_service.py`**
+  - `invite_teacher(institute_id, name, phone)` — owner calls this; creates Teacher record, calls Supabase to send OTP to teacher's phone
+  - `verify_otp(phone, token)` — teacher activates their account; links `user_id` to Teacher record, returns JWT
+  - `get_current_teacher_id(supabase, authorization)` — validates JWT, returns teacher's user_id
+
+- [ ] **Create `BatchBook/routes/teacher_route.py`** with endpoints:
+  - `POST /teacher/invite` — owner invites a teacher (body: `{ name, phone }`)
+  - `POST /teacher/verify_otp` — teacher activates account (body: `{ phone, token }`)
+  - `GET /teacher/me` — teacher's own profile
+  - `GET /teacher/` — owner lists all teachers in their institute
+  - `DELETE /teacher/{teacher_id}` — owner removes a teacher
+
+- [ ] **Register router in `app.py`**
+
+---
+
+### Task 1.5 — Frontend: Remove Firebase, add Supabase
 
 **Why:** Firebase and Supabase are both doing phone OTP auth. They're completely separate systems. The backend only knows about Supabase JWTs — Firebase JWTs are useless to it. So the frontend must also use Supabase to generate tokens the backend will accept.
 
-- [ ] **Remove Firebase**
+- [x] **Remove Firebase**
   ```bash
   cd ~/WebstormProjects/batchbookui
   npm uninstall firebase
@@ -299,7 +370,7 @@ ClassSession ───── Attendance (one session has one attendance row per 
 
 ---
 
-### Task 1.4 — Frontend: Owner routes + basic dashboard shell
+### Task 1.6 — Frontend: Owner routes + basic dashboard shell
 
 **Why:** The student dashboard already exists. We need a completely separate owner section with its own layout (sidebar navigation instead of bottom tabs, different pages entirely).
 
@@ -359,22 +430,35 @@ ClassSession ───── Attendance (one session has one attendance row per 
 **What a Batch is:** "Class 10 Maths — Monday/Wednesday/Friday 4–5 PM, max 30 students, ₹1500/month." Every coaching institute has multiple batches like this.
 
 - [ ] **Create `BatchBook/models/batch_base.py`**
-  Fields: `id`, `institute_id` (FK → institute.id), `name` (e.g. "Class 10 Maths"), `subject`, `grade` (nullable, e.g. "10"), `start_time` (Time), `end_time` (Time), `days_of_week` (JSON array, e.g. `["MON", "WED", "FRI"]`), `max_capacity` (int), `created_at`
+  Fields: `id`, `institute_id` (FK → institute.id), `name` (e.g. "Class 10 Maths"), `subject`, `grade` (nullable, e.g. "10"), `start_time` (Time), `end_time` (Time), `days_of_week` (JSON array, e.g. `["MON", "WED", "FRI"]`), `max_capacity` (int), `start_date` (Date, defaults to creation date), `end_date` (Date, defaults to start_date + 12 months — owner can override), `status` (Enum: ACTIVE / CLOSING / ARCHIVED, default ACTIVE), `created_at`
+
+  **Batch lifecycle:** When `end_date` passes, a background job (or check at login) flips status to CLOSING. Owner and assigned teachers see a banner: *"This batch ends on [date] — settle all dues before archiving."* Owner can only move to ARCHIVED once `can_archive()` returns true (no unsettled fee records).
+
+- [ ] **Create `BatchBook/models/batch_teacher_base.py`**
+  Fields: `id`, `batch_id` (FK → batch.id), `teacher_id` (FK → teacher.id)
+  Unique constraint: `(batch_id, teacher_id)` — a teacher can't be assigned to the same batch twice.
 
 - [ ] **Create migration and run it**
 
 - [ ] **Create `BatchBook/repositories/batch_repository.py`**
-  Functions: `create`, `get_all_by_institute_id`, `get_by_id`, `update`, `delete`
+  Functions: `create`, `get_all_by_institute_id`, `get_by_id`, `update`, `delete`, `assign_teacher(db, batch_id, teacher_id)`, `remove_teacher(db, batch_id, teacher_id)`, `get_teachers_for_batch(db, batch_id)`, `get_batches_for_teacher(db, teacher_id)`
 
 - [ ] **Create `BatchBook/services/batch_service.py`**
-  Wraps the repo. Key responsibility: verify that the batch belongs to the requesting owner's institute before any operation (security check).
+  Wraps the repo. Key responsibilities:
+  - Verify batch belongs to requesting owner's institute before any operation (security check)
+  - `can_archive(batch_id)` — returns False if any FeeRecord for this batch is NOT_PAID or PARTIALLY_PAID; returns True otherwise
+  - `try_archive(batch_id)` — calls `can_archive()`, raises error with list of unsettled students if False, otherwise sets status to ARCHIVED
+  - `check_closing_batches(institute_id)` — call at owner login; flips any ACTIVE batch whose `end_date < today` to CLOSING
 
-- [ ] **Create `BatchBook/routes/batch_route.py`** with 5 endpoints:
+- [ ] **Create `BatchBook/routes/batch_route.py`** with 7 endpoints:
   - `POST /batch/` — create a new batch
   - `GET /batch/` — list all batches for this owner's institute
   - `GET /batch/{batch_id}` — get one batch
-  - `PATCH /batch/{batch_id}` — update batch details
+  - `PATCH /batch/{batch_id}` — update batch details (including `end_date`)
   - `DELETE /batch/{batch_id}` — delete batch (only if no active enrollments)
+  - `POST /batch/{batch_id}/assign-teacher` — body: `{ teacher_id }` — assign teacher to batch
+  - `DELETE /batch/{batch_id}/teacher/{teacher_id}` — remove teacher from batch
+  - `POST /batch/{batch_id}/archive` — attempt to archive; returns error with unsettled student list if dues remain
 
 - [ ] Register router in `app.py`
 
@@ -387,17 +471,20 @@ ClassSession ───── Attendance (one session has one attendance row per 
 - [ ] **Add `institute_id` (nullable FK) to StudentSchema** — so we know which institute a student belongs to. Create migration.
 
 - [ ] **Create `BatchBook/models/enrollment_base.py`**
-  Fields: `id`, `student_id` (FK → student.id), `batch_id` (FK → batch.id), `enrolled_at` (datetime), `is_active` (bool, default True)
+  Fields: `id`, `student_id` (FK → student.id), `batch_id` (FK → batch.id), `enrolled_at` (datetime), `is_active` (bool, default True), `due_day` (int, 1–28 — the student's personal fee due date, defaults to the day of enrollment), `first_month_amount` (Decimal, nullable — pro-rated fee for the joining month; if null, use FeeStructure.monthly_amount)
   Unique constraint: `(student_id, batch_id)` — a student can't be enrolled in the same batch twice.
+
+  **Why per-enrollment due date:** Students join throughout the month. Student A joining on the 3rd and Student B joining on the 18th are in the same batch but have different payment cycles. Storing `due_day` on the enrollment (not on FeeStructure) handles this without creating a new batch per enrollment date.
 
 - [ ] **Create migration and run it**
 
 - [ ] **Create `BatchBook/repositories/enrollment_repository.py`**
-  Functions: `create`, `get_by_batch_id`, `get_by_student_id`, `get_active_by_batch_id`, `deactivate`
+  Functions: `create`, `get_by_batch_id`, `get_by_student_id`, `get_active_by_batch_id`, `deactivate`, `update_due_day`
 
-- [ ] **Create `BatchBook/routes/enrollment_route.py`** with 3 endpoints:
-  - `POST /enrollment/` — enroll a student in a batch (body: `{ student_id, batch_id }`)
+- [ ] **Create `BatchBook/routes/enrollment_route.py`** with 4 endpoints:
+  - `POST /enrollment/` — enroll a student in a batch (body: `{ student_id, batch_id, due_day, first_month_amount }` — `due_day` defaults to day of `enrolled_at`, `first_month_amount` is optional)
   - `GET /enrollment/batch/{batch_id}` — list all students in a batch
+  - `PATCH /enrollment/{enrollment_id}` — update `due_day` or `first_month_amount` for a student (teacher correction)
   - `DELETE /enrollment/{enrollment_id}` — remove student from batch (sets `is_active = False`)
 
 - [ ] Register router in `app.py`
@@ -425,7 +512,7 @@ ClassSession ───── Attendance (one session has one attendance row per 
   Search by name. "Add Student" button.
 
 - [ ] **Create `src/pages/owner/AddStudentModal.jsx`**
-  Form: Name, Phone Number, select Batch. Submit → `addStudent()` → success toast.
+  Form: Name, Phone Number, select Batch, Fee Due Day (number input, pre-filled with today's date), First Month Fee (number input, pre-filled with pro-rated amount based on days remaining in the month — teacher can override). Submit → `addStudent()` → success toast.
 
 - [ ] **Wire pages into `OwnerDashboard.jsx`** sidebar navigation
 
@@ -446,7 +533,8 @@ ClassSession ───── Attendance (one session has one attendance row per 
 **FeeRecord:** One record per student per month. "Rahul (Enrollment #47) owes ₹1500 for May 2026. Status: NOT_PAID." When Rahul pays, this record gets updated.
 
 - [ ] **Create `BatchBook/models/fee_structure_base.py`**
-  Fields: `id`, `batch_id` (FK, unique — one structure per batch), `monthly_amount` (Numeric/Decimal), `due_day` (int, 1–28), `created_at`
+  Fields: `id`, `batch_id` (FK, unique — one structure per batch), `monthly_amount` (Numeric/Decimal), `created_at`
+  Note: `due_day` lives on `Enrollment`, not here — each student has their own due date based on when they joined.
 
 - [ ] **Create `BatchBook/models/fee_record_base.py`**
   Fields: `id`, `enrollment_id` (FK → enrollment.id), `month` (Date — stored as first day of month, e.g. 2026-05-01), `amount_due` (Numeric), `amount_paid` (Numeric, default 0), `status` (Enum: NOT_PAID / PARTIALLY_PAID / FULLY_PAID, default NOT_PAID), `paid_at` (datetime, nullable), `payment_reference` (str, nullable — UPI transaction ID), `payment_link` (str, nullable — Razorpay link URL), `created_at`
@@ -465,8 +553,8 @@ ClassSession ───── Attendance (one session has one attendance row per 
 
 - [ ] **Create `BatchBook/services/fee_service.py`**
   Key methods:
-  - `setup_fee_structure(batch_id, amount, due_day)` — creates or overwrites the FeeStructure for a batch
-  - `generate_monthly_records(batch_id, month_str)` — takes all **active** enrollments in the batch, creates one FeeRecord per enrollment for that month (amount_due = FeeStructure.monthly_amount). Skip if record already exists (idempotent).
+  - `setup_fee_structure(batch_id, amount)` — creates or overwrites the FeeStructure for a batch (no `due_day` — that lives on each Enrollment)
+  - `generate_monthly_records(batch_id, month_str)` — takes all **active** enrollments in the batch, creates one FeeRecord per enrollment for that month. For each enrollment: if it's the student's first month AND `enrollment.first_month_amount` is set, use that; otherwise use `FeeStructure.monthly_amount`. Skip if record already exists (idempotent).
   - `mark_payment(record_id, amount_paid, reference)` — updates the record. If amount_paid >= amount_due → status = FULLY_PAID. If 0 < amount_paid < amount_due → PARTIALLY_PAID.
   - `get_fee_dashboard(institute_id, month_str)` — returns: total_due (sum), total_collected (sum), total_pending (sum), collection_rate (%), list of all records with student name + batch name
 
@@ -569,7 +657,7 @@ ClassSession ───── Attendance (one session has one attendance row per 
 ### Task 3.5 — Frontend: Fee Management pages
 
 - [ ] **Add fee functions to `src/services/ownerService.js`**:
-  `getFeeDashboard(month)`, `getBatchFees(batchId, month)`, `setupFeeStructure(batchId, amount, dueDay)`, `generateMonthlyRecords(batchId, month)`, `markPayment(recordId, amountPaid, reference)`, `sendReminder(recordId)`, `sendBulkReminder(batchId, month)`, `getPaymentLink(recordId)`
+  `getFeeDashboard(month)`, `getBatchFees(batchId, month)`, `setupFeeStructure(batchId, amount)`, `generateMonthlyRecords(batchId, month)`, `markPayment(recordId, amountPaid, reference)`, `sendReminder(recordId)`, `sendBulkReminder(batchId, month)`, `getPaymentLink(recordId)`
 
 - [ ] **Create `src/pages/owner/FeesPage.jsx`**
   Layout:
@@ -579,7 +667,7 @@ ClassSession ───── Attendance (one session has one attendance row per 
   - In each batch tab: table of students with columns — Name, Amount Due, Amount Paid, Status chip (green/yellow/red), [Remind] button, [Mark Paid] button, [Copy UPI Link] icon
 
 - [ ] **Create `src/pages/owner/FeeSetupModal.jsx`**
-  MUI Dialog. Fields: Monthly Amount (number input), Due Day (1–28). Submit → `setupFeeStructure()` → then `generateMonthlyRecords()` for current month.
+  MUI Dialog. Fields: Monthly Amount (number input) only — due date is now per-student, set at enrollment time. Submit → `setupFeeStructure()` → then `generateMonthlyRecords()` for current month.
 
 - [ ] **Create `src/pages/owner/MarkPaymentModal.jsx`**
   MUI Dialog. Fields: Amount Paid (prefilled with full amount), Transaction Reference (UPI ID or "Cash"). Submit → `markPayment()` → row updates to green.
