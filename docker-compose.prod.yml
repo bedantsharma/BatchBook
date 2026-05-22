@@ -1,0 +1,40 @@
+name: batchbook-prod
+
+services:
+
+  # ── FastAPI backend ─────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: prod                     # baked-in source, 2 uvicorn workers
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    networks:
+      - batchbook
+    restart: unless-stopped
+
+  # ── React / nginx frontend ──────────────────────────────────────
+  frontend:
+    build:
+      context: ./batchbookui
+      dockerfile: Dockerfile
+      target: prod                     # Vite build → nginx
+      args:
+        # Baked into the JS bundle at build time.
+        # In prod, nginx proxies /student/* and /owner/* directly (see nginx.conf),
+        # so VITE_API_URL can be left as "/" or a real domain if you skip nginx proxy.
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    ports:
+      - "80:80"
+    networks:
+      - batchbook
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+networks:
+  batchbook:
+    driver: bridge

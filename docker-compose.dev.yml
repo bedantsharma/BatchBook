@@ -1,0 +1,44 @@
+name: batchbook-dev
+
+services:
+
+  # ── FastAPI backend ─────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev                      # uses the "dev" stage (hot-reload)
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app                         # live-reload: host source → container
+      - /app/.venv                     # anonymous vol: protect container's .venv
+      - /app/batchbookui               # don't expose the submodule into backend
+    env_file:
+      - .env                           # DATABASE_URL, SUPABASE_URL, SUPABASE_KEY …
+    networks:
+      - batchbook
+    restart: unless-stopped
+
+  # ── React / Vite frontend ───────────────────────────────────────
+  frontend:
+    build:
+      context: ./batchbookui
+      dockerfile: Dockerfile
+      target: dev                      # uses the "dev" stage (Vite HMR)
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./batchbookui:/app             # live-reload: host source → container
+      - /app/node_modules              # anonymous vol: protect container's node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000   # frontend calls backend directly in dev
+    networks:
+      - batchbook
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+networks:
+  batchbook:
+    driver: bridge
