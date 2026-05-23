@@ -3,7 +3,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase import AsyncClient
 
-from DTO.student_model import Student, StudentFeesStatus
+from DTO.student_model import StudentFeesStatus
 from models.student_base import StudentSchema
 from repositories.student_repository import StudentRepository
 from services.auth_service import get_current_user_id as _get_user_id
@@ -13,69 +13,39 @@ class StudentService:
     def __init__(self):
         self.student_repo = StudentRepository()
 
-    async def create_student(self, data: Student, db: AsyncSession):
-        student_schema = StudentSchema(**data.model_dump())
-        return await self.student_repo.create_student(db, student_schema)
-
-    async def get_or_create_after_otp(
+    async def create_student(
         self,
         db: AsyncSession,
-        user_id: UUID,
-        phone: str,
-        name: str | None,
-        email: str | None,
+        name: str,
+        parent_id: int | None = None,
+        institute_id: int | None = None,
+        email: str | None = None,
     ) -> StudentSchema:
-        existing = await self.student_repo.get_by_user_id(db, user_id)
-        if existing:
-            return existing
         student = StudentSchema(
-            user_id=user_id,
-            phone_number=phone,
             name=name,
+            parent_id=parent_id,
+            institute_id=institute_id,
             email=email,
             fees_status=StudentFeesStatus.NOT_PAID,
         )
         return await self.student_repo.create_student(db, student)
 
-    async def verify_otp(
-        self,
-        supabase,
-        db: AsyncSession,
-        phone: str,
-        token: str,
-        name: str | None,
-        email: str | None,
-    ) -> tuple[str, str, str, UUID]:
-        """Verify the OTP with Supabase, upsert the student, and return (access_token, refresh_token, aud, user_id)."""
-        try:
-            data = await supabase.auth.verify_otp({
-                "phone": f"+91{phone}",
-                "token": token,
-                "type": "sms",
-            })
-        except Exception as e:
-            raise ValueError(str(e)) from e
-        if not data.user or not data.session:
-            raise ValueError("OTP verification failed")
-        user_id = UUID(str(data.user.id))
-        await self.get_or_create_after_otp(db, user_id, phone, name, email)
-        return data.session.access_token, data.session.refresh_token, data.user.aud, user_id
-
     async def get_current_user_id(self, supabase: AsyncClient, authorization: str) -> UUID:
         return await _get_user_id(supabase, authorization)
 
-    async def get_student_by_user_id(
-        self, db: AsyncSession, user_id: UUID
+    async def get_student_by_id(
+        self, db: AsyncSession, student_id: int
     ) -> StudentSchema | None:
-        return await self.student_repo.get_by_user_id(db, user_id)
+        return await self.student_repo.get_by_id(db, student_id)
 
     async def update_student(
-        self, db: AsyncSession, user_id: UUID, updates: dict
+        self, db: AsyncSession, student_id: int, updates: dict
     ) -> StudentSchema | None:
-        student = await self.student_repo.get_by_user_id(db, user_id)
+        student = await self.student_repo.get_by_id(db, student_id)
         if not student:
             return None
         return await self.student_repo.update_student(db, student, updates)
+
 
 def get_student_service() -> StudentService:
     return StudentService()

@@ -11,5 +11,7 @@ class StudentFeesStatus(str, Enum):
 
 class Student(BaseModel):
     name: str = Field(min_length=1, max_length=50, pattern=r"^[a-zA-Z ]+$")
-    phone_number: str = Field(min_length=10, max_length=10, pattern=r"^\+?1?\d{9,15}$")
-    fees_status: StudentFeesStatus = StudentFeesStatus.NOT_PAID  # paid or partial paid or not paid
+    parent_id: int | None = None
+    institute_id: int | None = None
+    email: str | None = Field(default=None, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    fees_status: StudentFeesStatus = StudentFeesStatus.NOT_PAID
