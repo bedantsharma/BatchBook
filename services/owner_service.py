@@ -35,11 +35,14 @@ class OwnerService:
         name: str | None,
         email: str | None,
     ) -> tuple[str, str, str, UUID]:
-        data = await supabase.auth.verify_otp({
-            "phone": f"+91{phone}",
-            "token": token,
-            "type": "sms",
-        })
+        try:
+            data = await supabase.auth.verify_otp({
+                "phone": f"+91{phone}",
+                "token": token,
+                "type": "sms",
+            })
+        except Exception as e:
+            raise ValueError(str(e)) from e
         if not data.user or not data.session:
             raise ValueError("OTP verification failed")
         teacher_id = UUID(str(data.user.id))

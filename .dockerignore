@@ -1,0 +1,30 @@
+# ── Python ────────────────────────────────────────────────────────
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# ── Testing / lint ────────────────────────────────────────────────
+.pytest_cache/
+.ruff_cache/
+
+# ── Git / IDE ─────────────────────────────────────────────────────
+.git/
+.gitmodules
+.idea/
+*.iml
+
+# ── Secrets ───────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Frontend submodule (built separately) ─────────────────────────
+batchbookui/
+
+# ── Docs / misc ───────────────────────────────────────────────────
+docs/
+*.md

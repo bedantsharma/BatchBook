@@ -1,0 +1,3 @@
+[submodule "batchbookui"]
+	path = batchbookui
+	url = git@github.com:bedantsharma/batchbookui.git
