@@ -9,16 +9,16 @@ from supabase_auth.errors import AuthApiError
 
 from clients.supabase_client import get_supabase_client
 from db.session import get_db
-from services.owner_service import OwnerService, get_owner_service
-from services.institute_service import InstituteService, get_institute_service
+from routes.requests.create_institute_request import CreateInstituteRequest
 from routes.requests.otp_generate_request import OtpGenerateRequest
 from routes.requests.owner_verify_otp_request import OwnerVerifyOtpRequest
 from routes.requests.refresh_token_request import RefreshTokenRequest
 from routes.requests.update_owner_request import UpdateOwnerRequest
-from routes.requests.create_institute_request import CreateInstituteRequest
+from routes.responses.institute_response import InstituteResponse
 from routes.responses.owner_profile_response import OwnerProfileResponse
 from routes.responses.verify_owner_response import VerifyOwnerResponse
-from routes.responses.institute_response import InstituteResponse
+from services.institute_service import InstituteService, get_institute_service
+from services.owner_service import OwnerService, get_owner_service
 
 router = APIRouter(prefix="/owner")
 
