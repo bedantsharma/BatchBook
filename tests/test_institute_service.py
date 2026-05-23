@@ -39,7 +39,10 @@ async def test_create_institute_returns_new_institute(service, mock_db):
     expected = _make_institute(owner_id=5)
     create_mock = AsyncMock(return_value=expected)
 
-    with patch.object(service.institute_repo, "create", new=create_mock):
+    with (
+        patch.object(service.institute_repo, "get_by_owner_id", new=AsyncMock(return_value=None)),
+        patch.object(service.institute_repo, "create", new=create_mock),
+    ):
         result = await service.create_institute(mock_db, owner_id=5, name="Sharma Classes", city="Gurugram")
 
     assert result is expected
@@ -47,14 +50,16 @@ async def test_create_institute_returns_new_institute(service, mock_db):
 
 
 async def test_create_institute_builds_correct_schema(service, mock_db):
-    create_mock = AsyncMock(return_value=_make_institute())
     captured = {}
 
     async def capture_create(db, institute):
         captured["institute"] = institute
         return institute
 
-    with patch.object(service.institute_repo, "create", new=AsyncMock(side_effect=capture_create)):
+    with (
+        patch.object(service.institute_repo, "get_by_owner_id", new=AsyncMock(return_value=None)),
+        patch.object(service.institute_repo, "create", new=AsyncMock(side_effect=capture_create)),
+    ):
         await service.create_institute(mock_db, owner_id=7, name="Test Academy", city="Lucknow")
 
     inst = captured["institute"]
