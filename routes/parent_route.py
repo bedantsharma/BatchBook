@@ -1,6 +1,7 @@
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase import AsyncClient
@@ -8,48 +9,33 @@ from supabase_auth.errors import AuthApiError
 
 from clients.supabase_client import get_supabase_client
 from db.session import get_db
-from DTO.student_model import Student
-from services.student_service import StudentService, get_student_service
 from services.parent_service import ParentService, get_parent_service
-from .requests.otp_generate_request import OtpGenerateRequest
-from .requests.otp_verify_request import OtpVerifyRequest
-from .requests.refresh_token_request import RefreshTokenRequest
-from .responses.verify_parent_response import VerifyParentResponse, StudentSummaryInToken
+from routes.requests.otp_generate_request import OtpGenerateRequest
+from routes.requests.parent_verify_otp_request import ParentVerifyOtpRequest
+from routes.requests.refresh_token_request import RefreshTokenRequest
+from routes.responses.parent_profile_response import ParentProfileResponse, StudentSummary
+from routes.responses.verify_parent_response import VerifyParentResponse, StudentSummaryInToken
 
-router = APIRouter(prefix="/student")
+router = APIRouter(prefix="/parent")
 
 SupabaseClient = Annotated[AsyncClient, Depends(get_supabase_client)]
-StudentServiceDep = Annotated[StudentService, Depends(get_student_service)]
 ParentServiceDep = Annotated[ParentService, Depends(get_parent_service)]
 
 
-@router.post(
-    "/",
-    summary="Create a new student record directly (internal / admin use)",
-)
-async def create_student(
-    user: Student,
-    student_service: StudentServiceDep,
-    db: AsyncSession = Depends(get_db),
-):
-    logger.info(f"create student called with {user}")
-    return await student_service.create_student(
-        db=db,
-        name=user.name,
-        parent_id=user.parent_id,
-        institute_id=user.institute_id,
-        email=user.email,
-    )
+async def _get_current_user_id(
+    authorization: Annotated[str, Header()],
+    supabase: SupabaseClient,
+    parent_service: ParentServiceDep,
+) -> UUID:
+    try:
+        return await parent_service.get_current_user_id(supabase, authorization)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
 @router.post(
     "/generate_otp",
-    summary="Send an OTP to the given Indian mobile number via Supabase (student-app / parent login)",
-    description=(
-        "Initiates phone OTP for the student-app login flow. "
-        "Authentication is parent-based: verify_otp returns a Parent JWT plus the list of children. "
-        "Use POST /parent/generate_otp for the canonical endpoint."
-    ),
+    summary="Send an OTP to the given Indian mobile number (parent/student-app login)",
 )
 async def send_otp(request: OtpGenerateRequest, supabase: SupabaseClient):
     try:
@@ -64,16 +50,11 @@ async def send_otp(request: OtpGenerateRequest, supabase: SupabaseClient):
 
 @router.post(
     "/verify_otp",
-    summary="Verify OTP; upserts Parent record and returns JWT + list of children",
-    description=(
-        "Verifies the SMS OTP. On success, creates or retrieves the Parent record "
-        "and returns an access token plus the list of child Student records linked to this parent. "
-        "Use POST /parent/verify_otp for the canonical endpoint."
-    ),
+    summary="Verify OTP and upsert parent record; returns JWT + list of children",
     response_model=VerifyParentResponse,
 )
 async def verify_otp(
-    verify_request: OtpVerifyRequest,
+    verify_request: ParentVerifyOtpRequest,
     parent_service: ParentServiceDep,
     supabase: SupabaseClient,
     db: AsyncSession = Depends(get_db),
@@ -103,6 +84,39 @@ async def verify_otp(
         refresh_token=refresh_token,
         aud=aud,
         user_id=str(user_id),
+        children=children_summary,
+    )
+
+
+@router.get(
+    "/me",
+    summary="Fetch the authenticated parent's profile and their children",
+    response_model=ParentProfileResponse,
+)
+async def get_parent(
+    parent_service: ParentServiceDep,
+    db: AsyncSession = Depends(get_db),
+    user_id: UUID = Depends(_get_current_user_id),
+):
+    parent = await parent_service.get_parent_by_user_id(db=db, user_id=user_id)
+    if not parent:
+        raise HTTPException(status_code=404, detail="Parent record not found")
+    children = await parent_service.get_children(db=db, user_id=user_id)
+    children_summary = [
+        StudentSummary(
+            id=c.id,
+            name=c.name,
+            email=c.email,
+            fees_status=c.fees_status.value,
+            institute_id=c.institute_id,
+        )
+        for c in children
+    ]
+    return ParentProfileResponse(
+        id=parent.id,
+        name=parent.name,
+        phone_number=parent.phone_number,
+        created_at=parent.created_at,
         children=children_summary,
     )
 
