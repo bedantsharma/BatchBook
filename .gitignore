@@ -13,4 +13,5 @@ wheels/
 
 # IDE
 .idea/
-.idea/*
+.idea/*.env
+.venv_test/

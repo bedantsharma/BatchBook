@@ -141,7 +141,7 @@ async def update_owner(
 
 @router.post(
     "/institute",
-    summary="Set up the owner's institute (name and city). Only allowed once per owner.",
+    summary="Create the owner's institute (allowed only once per owner)",
     response_model=InstituteResponse,
     status_code=201,
 )
@@ -155,18 +155,31 @@ async def create_institute(
     owner = await owner_service.get_owner_by_teacher_id(db=db, teacher_id=teacher_id)
     if not owner:
         raise HTTPException(status_code=404, detail="Owner record not found")
+
+    existing = await institute_service.get_institute_by_owner_id(db=db, owner_id=owner.id)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="Institute already exists for this owner. Use GET /owner/institute to retrieve it.",
+        )
+
     try:
         institute = await institute_service.create_institute(
-            db=db, owner_id=owner.id, name=request.name, city=request.city
+            db=db,
+            owner_id=owner.id,
+            name=request.name,
+            city=request.city,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        logger.error(e)
+        raise HTTPException(status_code=500, detail="Could not create institute")
+
     return institute
 
 
 @router.get(
     "/institute",
-    summary="Get the authenticated owner's institute details.",
+    summary="Get the authenticated owner's institute details",
     response_model=InstituteResponse,
 )
 async def get_institute(
@@ -178,7 +191,12 @@ async def get_institute(
     owner = await owner_service.get_owner_by_teacher_id(db=db, teacher_id=teacher_id)
     if not owner:
         raise HTTPException(status_code=404, detail="Owner record not found")
-    institute = await institute_service.get_by_owner_id(db=db, owner_id=owner.id)
+
+    institute = await institute_service.get_institute_by_owner_id(db=db, owner_id=owner.id)
     if not institute:
-        raise HTTPException(status_code=404, detail="Institute not set up yet")
+        raise HTTPException(
+            status_code=404,
+            detail="No institute found. Use POST /owner/institute to create one.",
+        )
+
     return institute

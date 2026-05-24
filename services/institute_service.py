@@ -18,10 +18,18 @@ class InstituteService:
         institute = InstituteSchema(owner_id=owner_id, name=name, city=city)
         return await self.institute_repo.create(db, institute)
 
-    async def get_by_owner_id(
+    async def get_institute_by_owner_id(
         self, db: AsyncSession, owner_id: int
     ) -> InstituteSchema | None:
         return await self.institute_repo.get_by_owner_id(db, owner_id)
+
+    async def update_institute(
+        self, db: AsyncSession, owner_id: int, updates: dict
+    ) -> InstituteSchema | None:
+        institute = await self.institute_repo.get_by_owner_id(db, owner_id)
+        if not institute:
+            return None
+        return await self.institute_repo.update(db, institute, updates)
 
 
 def get_institute_service() -> InstituteService:
