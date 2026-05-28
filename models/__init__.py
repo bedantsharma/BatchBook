@@ -5,3 +5,4 @@ from .teacher_base import TeacherSchema
 from .parent_base import ParentSchema
 from .batch_base import BatchSchema, BatchStatus
 from .batch_teacher_base import BatchTeacherSchema
+from .enrollment_base import EnrollmentSchema
