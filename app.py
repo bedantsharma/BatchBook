@@ -48,8 +48,5 @@ app.include_router(router=student_router)
 app.include_router(router=owner_router)
 app.include_router(router=teacher_router)
 app.include_router(router=parent_router)
-<<<<<<< HEAD
-app.include_router(router=enrollment_router)
-=======
 app.include_router(router=batch_router)
->>>>>>> origin/master
+app.include_router(router=enrollment_router)
