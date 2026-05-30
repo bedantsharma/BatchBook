@@ -12,6 +12,7 @@ from routes.teacher_route import router as teacher_router
 from routes.parent_route import router as parent_router
 from routes.batch_route import router as batch_router
 from routes.enrollment_route import router as enrollment_router
+from routes.attendance_route import router as attendance_router
 
 
 @asynccontextmanager
@@ -48,8 +49,6 @@ app.include_router(router=student_router)
 app.include_router(router=owner_router)
 app.include_router(router=teacher_router)
 app.include_router(router=parent_router)
-<<<<<<< HEAD
-app.include_router(router=enrollment_router)
-=======
 app.include_router(router=batch_router)
->>>>>>> origin/master
+app.include_router(router=enrollment_router)
+app.include_router(router=attendance_router)
