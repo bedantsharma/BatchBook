@@ -6,3 +6,4 @@ from .parent_base import ParentSchema
 from .batch_base import BatchSchema, BatchStatus
 from .batch_teacher_base import BatchTeacherSchema
 from .enrollment_base import EnrollmentSchema
+from .test_score_base import TestScoreSchema
