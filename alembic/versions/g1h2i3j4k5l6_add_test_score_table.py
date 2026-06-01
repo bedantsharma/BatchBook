@@ -1,7 +1,7 @@
 """add test score table
 
-Revision ID: e1f2a3b4c5d6
-Revises: d1e2f3a4b5c6
+Revision ID: g1h2i3j4k5l6
+Revises: f1a2b3c4d5e6
 Create Date: 2026-05-31 00:00:00.000000
 """
 
@@ -10,8 +10,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "e1f2a3b4c5d6"
-down_revision: Union[str, Sequence[str], None] = "d1e2f3a4b5c6"
+revision: str = "g1h2i3j4k5l6"
+down_revision: Union[str, Sequence[str], None] = "f1a2b3c4d5e6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

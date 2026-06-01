@@ -12,6 +12,8 @@ from routes.teacher_route import router as teacher_router
 from routes.parent_route import router as parent_router
 from routes.batch_route import router as batch_router
 from routes.enrollment_route import router as enrollment_router
+from routes.fee_route import router as fee_router
+from routes.attendance_route import router as attendance_router
 from routes.test_score_route import router as test_score_router
 
 
@@ -55,4 +57,6 @@ app.include_router(router=teacher_router)
 app.include_router(router=parent_router)
 app.include_router(router=batch_router)
 app.include_router(router=enrollment_router)
+app.include_router(router=fee_router)
+app.include_router(router=attendance_router)
 app.include_router(router=test_score_router)
