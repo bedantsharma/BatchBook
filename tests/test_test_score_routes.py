@@ -10,8 +10,8 @@ from models.batch_base import BatchSchema, BatchStatus
 from models.enrollment_base import EnrollmentSchema
 from models.institute_base import InstituteSchema
 from models.owner_base import OwnerSchema
-from models.test_score_base import TestScoreSchema
-from services.test_score_service import TestScoreService
+from models.test_score_base import ScoreSchema
+from services.test_score_service import ScoreService
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -55,7 +55,7 @@ def _make_enrollment(batch_id=5):
 
 
 def _make_score(enrollment_id=3):
-    s = TestScoreSchema()
+    s = ScoreSchema()
     s.id = 1
     s.enrollment_id = enrollment_id
     s.test_name = "Unit Test 1"
@@ -108,7 +108,7 @@ async def test_create_score_success(client):
             "routes.test_score_route.InstituteService.get_by_owner_id",
             new=AsyncMock(return_value=institute),
         ),
-        patch("routes.test_score_route.TestScoreService.add_score", new=AsyncMock(return_value=score)),
+        patch("routes.test_score_route.ScoreService.add_score", new=AsyncMock(return_value=score)),
     ):
         resp = await client.post(
             "/scores/",

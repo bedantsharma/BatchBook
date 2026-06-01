@@ -15,14 +15,14 @@ from routes.requests.create_test_score_request import CreateTestScoreRequest
 from routes.responses.test_score_response import StudentScoresResponse, TestScoreResponse
 from services.institute_service import InstituteService, get_institute_service
 from services.owner_service import OwnerService, get_owner_service
-from services.test_score_service import TestScoreService, get_test_score_service
+from services.test_score_service import ScoreService, get_test_score_service
 
 router = APIRouter(prefix="/scores")
 
 SupabaseClient = Annotated[AsyncClient, Depends(get_supabase_client)]
 OwnerServiceDep = Annotated[OwnerService, Depends(get_owner_service)]
 InstituteServiceDep = Annotated[InstituteService, Depends(get_institute_service)]
-TestScoreServiceDep = Annotated[TestScoreService, Depends(get_test_score_service)]
+ScoreServiceDep = Annotated[ScoreService, Depends(get_test_score_service)]
 
 
 # ─── Auth helpers ─────────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ async def _verify_enrollment_belongs_to_institute(
 )
 async def create_test_score(
     request: CreateTestScoreRequest,
-    score_service: TestScoreServiceDep,
+    score_service: ScoreServiceDep,
     owner_service: OwnerServiceDep,
     institute_service: InstituteServiceDep,
     db: AsyncSession = Depends(get_db),
@@ -136,7 +136,7 @@ async def create_test_score(
 )
 async def get_student_scores(
     enrollment_id: int,
-    score_service: TestScoreServiceDep,
+    score_service: ScoreServiceDep,
     owner_service: OwnerServiceDep,
     institute_service: InstituteServiceDep,
     db: AsyncSession = Depends(get_db),
