@@ -14,11 +14,11 @@ from routes.batch_route import router as batch_router
 from routes.enrollment_route import router as enrollment_router
 from routes.fee_route import router as fee_router
 from routes.attendance_route import router as attendance_router
+from routes.test_score_route import router as test_score_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 2. Initialize once on startup
     supabase_client.supabase = await create_client(
         get_settings().supabase_url, get_settings().supabase_key
     )
@@ -40,7 +40,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173","http://localhost:5174","http://localhost:5175","https://68cd-2409-40d0-14e9-3bec-b1-11ec-46fe-8ef7.ngrok-free.app"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "https://68cd-2409-40d0-14e9-3bec-b1-11ec-46fe-8ef7.ngrok-free.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,3 +59,4 @@ app.include_router(router=batch_router)
 app.include_router(router=enrollment_router)
 app.include_router(router=fee_router)
 app.include_router(router=attendance_router)
+app.include_router(router=test_score_router)
