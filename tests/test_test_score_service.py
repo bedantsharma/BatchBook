@@ -1,21 +1,21 @@
-"""Tests for services/test_score_service.py — TestScoreService."""
+"""Tests for services/test_score_service.py — ScoreService."""
 
 from datetime import date
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from models.test_score_base import TestScoreSchema
-from services.test_score_service import NEEDS_ATTENTION_THRESHOLD, TestScoreService
+from models.test_score_base import ScoreSchema
+from services.test_score_service import NEEDS_ATTENTION_THRESHOLD, ScoreService
 
 
 @pytest.fixture
 def service():
-    return TestScoreService()
+    return ScoreService()
 
 
 def _make_score(enrollment_id=1, obtained=70, max_marks=100):
-    s = TestScoreSchema()
+    s = ScoreSchema()
     s.id = 1
     s.enrollment_id = enrollment_id
     s.test_name = "Unit Test"

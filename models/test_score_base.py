@@ -5,7 +5,7 @@ from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String
 from db.base import Base
 
 
-class TestScoreSchema(Base):
+class ScoreSchema(Base):
     __tablename__ = "TestScore"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)

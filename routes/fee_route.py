@@ -178,7 +178,7 @@ async def generate_monthly_records(
     fee_service: FeeServiceDep,
     owner_service: OwnerServiceDep,
     institute_service: InstituteServiceDep,
-    month: str = Query(..., example="2026-05", description="Month in YYYY-MM format"),
+    month: str = Query(..., examples=["2026-05"], description="Month in YYYY-MM format"),
     db: AsyncSession = Depends(get_db),
     owner_user_id: UUID = Depends(_get_current_owner_user_id),
 ):
@@ -282,7 +282,7 @@ async def fee_dashboard(
     fee_service: FeeServiceDep,
     owner_service: OwnerServiceDep,
     institute_service: InstituteServiceDep,
-    month: str = Query(..., example="2026-05", description="Month in YYYY-MM format"),
+    month: str = Query(..., examples=["2026-05"], description="Month in YYYY-MM format"),
     db: AsyncSession = Depends(get_db),
     owner_user_id: UUID = Depends(_get_current_owner_user_id),
 ):
@@ -318,7 +318,7 @@ async def get_batch_fees(
     fee_service: FeeServiceDep,
     owner_service: OwnerServiceDep,
     institute_service: InstituteServiceDep,
-    month: str = Query(..., example="2026-05", description="Month in YYYY-MM format"),
+    month: str = Query(..., examples=["2026-05"], description="Month in YYYY-MM format"),
     db: AsyncSession = Depends(get_db),
     owner_user_id: UUID = Depends(_get_current_owner_user_id),
 ):

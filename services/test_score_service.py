@@ -2,14 +2,14 @@ from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.test_score_base import TestScoreSchema
+from models.test_score_base import ScoreSchema
 from repositories.test_score_repository import TestScoreRepository
 
 # A student needs attention if the average of their last 3 scores is below this fraction.
 NEEDS_ATTENTION_THRESHOLD = 0.60
 
 
-class TestScoreService:
+class ScoreService:
     def __init__(self) -> None:
         self.repo = TestScoreRepository()
 
@@ -22,7 +22,7 @@ class TestScoreService:
         score_date: date,
         max_marks: int,
         obtained_marks: int,
-    ) -> TestScoreSchema:
+    ) -> ScoreSchema:
         """Record a test score for a student's enrollment.
 
         Raises:
@@ -35,7 +35,7 @@ class TestScoreService:
         if obtained_marks > max_marks:
             raise ValueError("obtained_marks cannot exceed max_marks")
 
-        score = TestScoreSchema(
+        score = ScoreSchema(
             enrollment_id=enrollment_id,
             test_name=test_name,
             subject=subject,
@@ -68,5 +68,5 @@ class TestScoreService:
         }
 
 
-def get_test_score_service() -> TestScoreService:
-    return TestScoreService()
+def get_test_score_service() -> ScoreService:
+    return ScoreService()
