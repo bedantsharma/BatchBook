@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "FILE=\"${CLAUDE_TOOL_INPUT_FILE_PATH:-}\"; if [[ \"$FILE\" == *.py ]] && [[ -f \"$FILE\" ]]; then uv run ruff check --fix \"$FILE\" 2>&1 || true; uv run ruff format \"$FILE\" 2>&1 || true; fi"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "FILE=\"${CLAUDE_TOOL_INPUT_FILE_PATH:-}\"; if [[ \"$FILE\" == *\".env\"* ]] && [[ \"$FILE\" != *\".env.example\"* ]]; then echo \"BLOCKED: Refusing to write to .env file: $FILE\" >&2; exit 1; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
