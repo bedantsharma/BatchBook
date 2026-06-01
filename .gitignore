@@ -15,3 +15,8 @@ wheels/
 .idea/
 .idea/*.env
 .venv_test/
+
+# Node / Playwright
+node_modules/
+test-results/
+playwright-report/
