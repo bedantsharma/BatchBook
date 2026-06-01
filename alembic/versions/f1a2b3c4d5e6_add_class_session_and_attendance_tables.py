@@ -1,12 +1,10 @@
 """add class_session and attendance tables
 
-Revision ID: e1f2a3b4c5d6
-Revises: d1e2f3a4b5c6
+Revision ID: f1a2b3c4d5e6
+Revises: e1f2a3b4c5d6
 Create Date: 2026-05-30 00:00:00.000000
 
-NOTE: This migration depends on the Enrollment table (revision d1e2f3a4b5c6) and
-the Batch table (revision c1d2e3f4a5b6).
-Apply those migrations before running this one.
+NOTE: Chains from FeeStructure/FeeRecord migration (e1f2a3b4c5d6).
 """
 
 from typing import Sequence, Union
@@ -15,8 +13,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "e1f2a3b4c5d6"
-down_revision: Union[str, Sequence[str], None] = "d1e2f3a4b5c6"
+revision: str = "f1a2b3c4d5e6"
+down_revision: Union[str, Sequence[str], None] = "e1f2a3b4c5d6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
