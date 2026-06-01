@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     database_url: str
     supabase_url: str
     supabase_key: str
+    razorpay_key_id: str | None = None
+    razorpay_key_secret: str | None = None
+    wati_api_endpoint: str | None = None
+    wati_api_token: str | None = None
 
 
 @lru_cache
