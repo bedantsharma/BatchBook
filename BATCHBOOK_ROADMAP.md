@@ -267,9 +267,9 @@ ClassSession ────────── Attendance (one session has one atte
 > RAZORPAY_KEY_SECRET=xxxxxxxx
 > ```
 > The `payment_link` column is already on `FeeRecord` — this task just needs the Razorpay client and one new endpoint.
-> Hi, bedant sharma this side. i have added the razorpay test creds in the .env file i am not sure that you have access to env file but you can start furthe developemnt assuming that you have the razorpay keys.
+> Hi Bedant sharma this side (the owner of this repo) i have added the razorpay creds in my local env file so you can contniue the further developeent assuming that there are razorpay creds
 
-- [x] **Sign up for Razorpay** and add test keys to `.env`
+- [ ] **Sign up for Razorpay** and add test keys to `.env`
 - [ ] **Add razorpay to `pyproject.toml`** and install: `uv add razorpay`
 - [ ] **Create `BatchBook/clients/razorpay_client.py`**
 - [ ] **Add `GET /fee/record/{record_id}/payment-link` endpoint**
