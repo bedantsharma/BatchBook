@@ -15,6 +15,7 @@ from routes.enrollment_route import router as enrollment_router
 from routes.fee_route import router as fee_router
 from routes.owner_route import router as owner_router
 from routes.parent_route import router as parent_router
+from routes.student_dashboard_route import router as student_dashboard_router
 from routes.student_route import router as student_router
 from routes.teacher_route import router as teacher_router
 from routes.test_score_route import router as test_score_router
@@ -81,6 +82,7 @@ async def log_and_handle_exceptions(request: Request, call_next):
 
 
 app.include_router(router=student_router)
+app.include_router(router=student_dashboard_router)
 app.include_router(router=owner_router)
 app.include_router(router=teacher_router)
 app.include_router(router=parent_router)
