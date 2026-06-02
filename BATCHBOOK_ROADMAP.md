@@ -564,12 +564,12 @@ uv run pytest -v  # 221 tests
 ## Status Labels
 
 | Symbol | Label | Meaning |
-|--------|-------|---------|
+|--------|--------------|--------------------------------------------------------------|
 | ✅ | `INTEGRATED` | PR merged to master, feature manually verified working |
-| 🟡 | `PR-OPEN` | Code written, PR exists, not yet merged to master |
-| 🔧 | `PARTIAL` | Some sub-tasks merged and working, others missing |
-| ⬜ | `NOT-STARTED` | Not touched |
-| 🚫 | `BLOCKED` | Waiting on external credential, API access, or template approval |
+| 🟡 | `PR-OPEN`    | Code written, PR exists, not yet merged to master |
+| 🔧 | `PARTIAL`    | Some sub-tasks merged and working, others missing |
+| ⬜ | `NOT-STARTED`| Not touched |
+| 🚫 | `BLOCKED`    | Waiting on external credential, API access, or template approval |
 
 ---
 
