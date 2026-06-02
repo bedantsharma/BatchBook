@@ -501,3 +501,8 @@ uv run pytest -v  # 221 tests
 | Add a new API call | `batchbookui/src/services/ownerService.js` |
 | Change the auth token logic | `batchbookui/src/services/api.js` |
 | Change global auth state | `batchbookui/src/context/AuthContext.jsx` |
+
+# todo for later - 
+> 1.  getStudentProfile() makes 3 concurrent API calls — if any fail, the whole load errors. Consider splitting into independent loading states in a future iteration.
+> 2. Multi-child parents see the first child automatically. A child-selector could be added later.
+> 3. The streak field in attendance is hardcoded to 0 — no streak computation endpoint exists yet.
