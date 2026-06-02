@@ -111,3 +111,14 @@ class FeeRepository:
         await db.commit()
         await db.refresh(record)
         return record
+
+    async def update_payment_link(
+        self,
+        db: AsyncSession,
+        record: FeeRecordSchema,
+        payment_link: str,
+    ) -> FeeRecordSchema:
+        record.payment_link = payment_link
+        await db.commit()
+        await db.refresh(record)
+        return record
