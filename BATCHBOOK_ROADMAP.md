@@ -20,8 +20,8 @@ A vertical SaaS product for India's small coaching institutes (tuition centers w
 
 | Repo | Path | Stack | Status |
 |------|------|-------|--------|
-| Backend API | `~/PycharmProjects/BatchBook` | FastAPI + PostgreSQL (Supabase) | **Phase 1–4 + 6 complete. 221 tests passing.** |
-| Frontend | `~/WebstormProjects/batchbookui` | React 19 + Material-UI | **Owner dashboard built with Batches, Fees, Attendance, Tests pages. Firebase removed, Supabase wired.** |
+| Backend API | `~/PycharmProjects/BatchBook` | FastAPI + PostgreSQL (Supabase) | **Phases 1–4 + 6 INTEGRATED (221 tests). Phase 0 in progress.** |
+| Frontend | `~/WebstormProjects/batchbookui` | React 19 + Material-UI | **Owner dashboard fully integrated. Student dashboard wired to real APIs (Phase 0). Teacher dashboard is a stub (deferred).** |
 
 ---
 
@@ -55,6 +55,13 @@ A vertical SaaS product for India's small coaching institutes (tuition centers w
 ### Frontend — What Is Missing
 - Student dashboard still uses **mock data** — not connected to real backend APIs (Phase 5)
 - `OwnerDashboard` header stats ("X students enrolled | ₹Y collected | Z% avg attendance") not wired up — needs fee + attendance APIs (partial Task 6.3)
+
+### Known Integration Gaps (fixed in Phase 0)
+- **ProtectedRoute had no role enforcement** — any logged-in user could reach any dashboard by URL. Fix: Task 0.1 adds OwnerRoute + StudentRoute with session + role checks.
+- **Owner post-login skipped institute creation** — new owner went straight to dashboard, causing API failures. Fix: Task 0.2 checks institute existence after OTP and routes to /owner/setup if missing.
+- **Parent OTP called wrong endpoint** — PhoneOtpStep called /student/verify_otp; correct is /parent/verify_otp. Fix: Task 0.4 corrects the endpoint and stores the student ID for dashboard queries.
+- **Student dashboard was 100% mock data on master** — PR #22 was a draft, never merged. Fix: Task 0.3 rewrites dashboardService.js and wires StudentDashboard.jsx to real backend.
+- **Teacher option in OnboardingWizard routed to a non-functional dashboard** — teacher scope is deferred. Fix: Teacher option is disabled with a "Coming soon" tooltip.
 
 ---
 
@@ -106,12 +113,62 @@ ClassSession ────────── Attendance (one session has one atte
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| **1** | Foundation: fix auth, create Owner model, basic owner dashboard shell | ✅ Complete |
-| **2** | Core data: Batch + Enrollment, student management UI | ✅ Complete |
-| **3** | Fee Management MVP (the product people pay for) | 🟡 Partial — 3.1, 3.2, 3.5 done; 3.3 needs Razorpay keys; 3.4 needs WATI |
-| **4** | Attendance + WhatsApp parent alerts | 🟡 Partial — 4.1, 4.3, 4.4 done; 4.2 needs WATI |
-| **5** | Connect student app to real backend (replace all mock data) | ❌ Not started |
-| **6** | Polish, tests, performance tracker | 🟡 Partial — 6.1, 6.2, 6.4 done; 6.3 partially done |
+| **0** | Integration stabilization — role routing, setup gate, student live data | ⬜ NOT-STARTED (in progress) |
+| **1** | Foundation: fix auth, create Owner model, basic owner dashboard shell | ✅ INTEGRATED |
+| **2** | Core data: Batch + Enrollment, student management UI | ✅ INTEGRATED |
+| **3** | Fee Management MVP (the product people pay for) | 🟡 PARTIAL — 3.1 ✅ 3.2 ✅ 3.3 ✅ 3.5 ✅ · 3.4 🚫 BLOCKED (WATI) |
+| **4** | Attendance + WhatsApp parent alerts | 🟡 PARTIAL — 4.1 ✅ 4.3 ✅ 4.4 ✅ · 4.2 🚫 BLOCKED (WATI) |
+| **5** | Connect student app to real backend | ⬜ NOT-STARTED (covered by Phase 0.3) |
+| **6** | Polish, tests, performance tracker | 🟡 PARTIAL — 6.1 ✅ 6.2 ✅ 6.4 ✅ · 6.3 🔧 PARTIAL |
+
+---
+
+## PHASE 0 — Integration Stabilization ⬜ IN PROGRESS
+
+**What we're doing:** Fixing three integration gaps that were left when features were built in isolation. Nothing new is being built — we are making what already exists actually work together end-to-end.
+
+**The agent MUST complete all Phase 0 tasks before picking any Phase 1–6 task.**
+
+---
+
+### Task 0.1 — Frontend: Role-aware routing ⬜ IN PROGRESS
+
+**Why:** ProtectedRoute only checked session existence. Any logged-in user could reach any dashboard URL by typing it directly.
+
+- [x] Update `AuthContext.jsx`: clean `bb_role` + `bb_student_id` from localStorage on signOut and session expiry
+- [x] Create `OwnerRoute.jsx`: session + `role === 'owner'` required (reads localStorage directly); else → `/phone-login`
+- [x] Create `StudentRoute.jsx`: session + `role === 'student'` required (reads localStorage directly); else → `/onboarding`
+- [x] Update `OtpVerification.jsx`: after setSession, stamp `localStorage.setItem('bb_role', 'owner')`
+- [x] Update `PhoneOtpStep.jsx`: call `/parent/verify_otp` (not `/student/verify_otp`); stamp `bb_role = 'student'` and `bb_student_id = children[0].id`
+- [x] Update `RoleStep.jsx`: disable teacher option with "Coming soon" tooltip
+- [x] Update `App.jsx`: `/owner/*` → OwnerRoute, `/dashboard/student` → StudentRoute, `/dashboard/teacher` → static message
+
+**Verified by:** _(pending manual verification)_
+
+---
+
+### Task 0.2 — Frontend: Owner setup gate ⬜ IN PROGRESS
+
+**Why:** A new owner (no institute yet) who completes OTP was sent directly to `/owner/dashboard`. Every API call that needs `institute_id` silently failed.
+
+- [x] Update `OtpVerification.jsx`: after setSession and role stamp, call `GET /owner/institute`. Navigate to `/owner/setup` on 404, `/owner/dashboard` on 200.
+
+**Verified by:** _(pending manual verification)_
+
+---
+
+### Task 0.3 — Backend + Frontend: Student dashboard live data ⬜ IN PROGRESS
+
+**Why:** `dashboardService.js` on master was 100% hardcoded mock data.
+
+**Backend is already done** — `student_dashboard_route.py` is implemented and registered.
+
+- [x] Rewrite `dashboardService.js` to call `/parent/me`, `/student/me/attendance`, `/student/me/schedule`, `/student/me/upcoming-events` via `api.js`
+- [x] Replace `PlaceholderContent` in `StudentDashboard.jsx` with real data display
+
+> **Note:** Task 0.3 covers the same work as Phase 5 (Tasks 5.1 + 5.2). Mark Phase 5 Tasks 5.1 and 5.2 as ✅ INTEGRATED once Task 0.3 is verified.
+
+**Verified by:** _(pending manual verification)_
 
 ---
 
@@ -501,6 +558,52 @@ uv run pytest -v  # 221 tests
 | Add a new API call | `batchbookui/src/services/ownerService.js` |
 | Change the auth token logic | `batchbookui/src/services/api.js` |
 | Change global auth state | `batchbookui/src/context/AuthContext.jsx` |
+
+---
+
+## Status Labels
+
+| Symbol | Label | Meaning |
+|--------|-------|---------|
+| ✅ | `INTEGRATED` | PR merged to master, feature manually verified working |
+| 🟡 | `PR-OPEN` | Code written, PR exists, not yet merged to master |
+| 🔧 | `PARTIAL` | Some sub-tasks merged and working, others missing |
+| ⬜ | `NOT-STARTED` | Not touched |
+| 🚫 | `BLOCKED` | Waiting on external credential, API access, or template approval |
+
+---
+
+## Definition of INTEGRATED (for agentic workers)
+
+A task is only marked ✅ INTEGRATED when ALL four conditions are true:
+
+1. **PR merged to master** — not open, not draft. Actually merged.
+2. **Tests pass** — `uv run pytest -v` shows zero failures after the merge.
+3. **Feature manually verified:**
+   - Backend task: at least one real curl/httpie request hit the endpoint and returned expected data. Include the command + output in the PR description.
+   - Frontend task: describe what a user sees when the feature works correctly.
+4. **This roadmap task has a "Verified by:" line** written in its checklist.
+
+**Marking a task INTEGRATED when its PR is open or draft is a roadmap bug. Do not do it.**
+
+---
+
+## Nightly Agent Pre-flight
+
+Run every session, before picking any task:
+
+```
+1. git checkout master && git pull origin master
+2. grep -rn "<<<<<<" --include="*.py" --include="*.jsx" --include="*.js" .
+   → If anything found: fix conflicts, open PR, end session. No new tasks.
+3. uv run pytest -q
+   → If tests fail: fix them, open PR, end session. No new tasks.
+4. Find the most recently modified task in this file.
+   → If it is PR-OPEN: write in session summary "PR [#N] needs merge before next task." End session.
+   → If it is INTEGRATED: proceed to step 5.
+5. Pick the first ⬜ NOT-STARTED task (top to bottom). Skip 🚫 BLOCKED.
+   Phase 0 tasks take priority over all other phases.
+```
 
 # todo for later - 
 > 1.  getStudentProfile() makes 3 concurrent API calls — if any fail, the whole load errors. Consider splitting into independent loading states in a future iteration.
