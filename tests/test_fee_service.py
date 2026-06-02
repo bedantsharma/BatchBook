@@ -333,3 +333,94 @@ async def test_mark_payment_overpayment_sets_fully_paid():
     )
 
     assert result == updated
+
+
+# ---------------------------------------------------------------------------
+# generate_payment_link
+# ---------------------------------------------------------------------------
+
+
+async def test_generate_payment_link_success():
+    svc = FeeService()
+    db = MagicMock()
+    razorpay_client = MagicMock()
+
+    record = _make_fee_record(
+        record_id=1,
+        amount_due=Decimal("1500.00"),
+        amount_paid=Decimal("0"),
+        status=FeeStatus.NOT_PAID,
+        month=date(2026, 5, 1),
+    )
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_record_by_id = AsyncMock(return_value=record)
+    svc.fee_repo.update_payment_link = AsyncMock(return_value=record)
+    svc._create_razorpay_link = AsyncMock(return_value={"short_url": "https://rzp.io/i/test123"})
+
+    result = await svc.generate_payment_link(db=db, record_id=1, razorpay_client=razorpay_client)
+
+    assert result["payment_link"] == "https://rzp.io/i/test123"
+    assert result["amount_pending"] == Decimal("1500.00")
+    assert result["record_id"] == 1
+    assert result["month"] == date(2026, 5, 1)
+    svc.fee_repo.update_payment_link.assert_called_once_with(
+        db, record, "https://rzp.io/i/test123"
+    )
+
+
+async def test_generate_payment_link_partial_pending_amount():
+    """Link covers the remaining balance, not the full fee."""
+    svc = FeeService()
+    db = MagicMock()
+    razorpay_client = MagicMock()
+
+    record = _make_fee_record(
+        record_id=2,
+        amount_due=Decimal("1500.00"),
+        amount_paid=Decimal("500.00"),
+        status=FeeStatus.PARTIALLY_PAID,
+        month=date(2026, 5, 1),
+    )
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_record_by_id = AsyncMock(return_value=record)
+    svc.fee_repo.update_payment_link = AsyncMock(return_value=record)
+    svc._create_razorpay_link = AsyncMock(return_value={"short_url": "https://rzp.io/i/partial"})
+
+    result = await svc.generate_payment_link(db=db, record_id=2, razorpay_client=razorpay_client)
+
+    assert result["amount_pending"] == Decimal("1000.00")
+    # Verify Razorpay received the correct paise amount (₹1000 = 100000 paise)
+    _, data_sent = svc._create_razorpay_link.call_args.args
+    assert data_sent["amount"] == 100000
+
+
+async def test_generate_payment_link_raises_when_record_not_found():
+    svc = FeeService()
+    db = MagicMock()
+    razorpay_client = MagicMock()
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_record_by_id = AsyncMock(return_value=None)
+
+    with pytest.raises(ValueError, match="FeeRecord 99 not found"):
+        await svc.generate_payment_link(db=db, record_id=99, razorpay_client=razorpay_client)
+
+
+async def test_generate_payment_link_raises_when_already_fully_paid():
+    svc = FeeService()
+    db = MagicMock()
+    razorpay_client = MagicMock()
+
+    record = _make_fee_record(
+        amount_due=Decimal("1500.00"),
+        amount_paid=Decimal("1500.00"),
+        status=FeeStatus.FULLY_PAID,
+    )
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_record_by_id = AsyncMock(return_value=record)
+
+    with pytest.raises(ValueError, match="already fully paid"):
+        await svc.generate_payment_link(db=db, record_id=1, razorpay_client=razorpay_client)

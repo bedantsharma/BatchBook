@@ -202,6 +202,54 @@ class FeeService:
     ) -> list[FeeRecordSchema]:
         return await self.fee_repo.get_records_by_batch_and_month(db, batch_id, month)
 
+    async def _create_razorpay_link(self, razorpay_client, data: dict) -> dict:
+        """Run the synchronous Razorpay SDK call in a thread pool."""
+        import asyncio
+
+        return await asyncio.to_thread(razorpay_client.payment_link.create, data)
+
+    async def generate_payment_link(
+        self,
+        db: AsyncSession,
+        record_id: int,
+        razorpay_client,
+    ) -> dict:
+        """Generate a Razorpay payment link for the remaining balance on a FeeRecord.
+
+        Raises:
+            ValueError: If the record is not found or is already fully paid.
+        """
+        record = await self.fee_repo.get_record_by_id(db, record_id)
+        if not record:
+            raise ValueError(f"FeeRecord {record_id} not found")
+
+        if record.status == FeeStatus.FULLY_PAID:
+            raise ValueError("Fee is already fully paid — no payment link needed")
+
+        amount_pending = record.amount_due - record.amount_paid
+        amount_paise = int(amount_pending * 100)
+        description = f"Fee payment for {record.month.strftime('%B %Y')}"
+
+        data = {
+            "amount": amount_paise,
+            "currency": "INR",
+            "accept_partial": False,
+            "description": description,
+            "reminder_enable": True,
+        }
+
+        result = await self._create_razorpay_link(razorpay_client, data)
+        payment_link_url = result["short_url"]
+
+        await self.fee_repo.update_payment_link(db, record, payment_link_url)
+
+        return {
+            "record_id": record.id,
+            "payment_link": payment_link_url,
+            "amount_pending": amount_pending,
+            "month": record.month,
+        }
+
 
 def get_fee_service() -> FeeService:
     return FeeService()
