@@ -259,7 +259,7 @@ ClassSession ────────── Attendance (one session has one atte
 
 ---
 
-### Task 3.3 — Backend: Razorpay UPI payment links ❌ **NEEDS YOUR INPUT**
+### Task 3.3 — Backend: Razorpay UPI payment links ✅
 
 > **⚠️ Blocked on you:** Sign up at razorpay.com → Dashboard → Settings → API Keys → generate a **test key pair**. Add to `BatchBook/.env`:
 > ```
@@ -269,10 +269,10 @@ ClassSession ────────── Attendance (one session has one atte
 > The `payment_link` column is already on `FeeRecord` — this task just needs the Razorpay client and one new endpoint.
 > Hi Bedant sharma this side (the owner of this repo) i have added the razorpay creds in my local env file so you can contniue the further developeent assuming that there are razorpay creds
 
-- [ ] **Sign up for Razorpay** and add test keys to `.env`
-- [ ] **Add razorpay to `pyproject.toml`** and install: `uv add razorpay`
-- [ ] **Create `BatchBook/clients/razorpay_client.py`**
-- [ ] **Add `GET /fee/record/{record_id}/payment-link` endpoint**
+- [x] **Sign up for Razorpay** and add test keys to `.env`
+- [x] **Add razorpay to `pyproject.toml`** and install: `uv add razorpay`
+- [x] **Create `BatchBook/clients/razorpay_client.py`**
+- [x] **Add `GET /fee/record/{record_id}/payment-link` endpoint**
 
 ---
 
