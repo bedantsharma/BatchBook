@@ -17,6 +17,12 @@
 #  Override the target environment for individual service restarts:
 #    make frontend MODE=prod
 #    make backend  MODE=prod
+#
+#  Skip the Alembic migration check (not recommended):
+#    make dev BYPASS_UPDATE=1
+#
+#  Apply pending migrations:
+#    make migrate
 # ─────────────────────────────────────────────────────────────────
 
 # ── BuildKit — must be on for --mount=type=cache in Dockerfiles to work ──────
@@ -27,6 +33,10 @@ export COMPOSE_DOCKER_CLI_BUILD := 1
 MODE ?= dev
 COMPOSE_FILE = docker-compose.$(MODE).yml
 
+# Set to 1 to skip the Alembic migration guard: make dev BYPASS_UPDATE=1
+BYPASS_UPDATE ?= 0
+export BYPASS_UPDATE
+
 # Colour helpers
 CYAN  := \033[0;36m
 RESET := \033[0m
@@ -34,7 +44,7 @@ RESET := \033[0m
 .PHONY: dev prod down frontend backend \
         logs logs-f logs-b \
         build build-dev build-prod \
-        clean ps help
+        migrate clean ps help
 
 # ── Full stack ────────────────────────────────────────────────────
 
@@ -68,6 +78,16 @@ frontend:
 backend:
 	@echo "$(CYAN)▶ Reloading backend ($(MODE))…$(RESET)"
 	docker compose -f $(COMPOSE_FILE) up -d --build backend
+
+# ── Migrations ───────────────────────────────────────────────────
+
+## Apply all pending Alembic migrations to head (dev stack)
+migrate:
+	@echo "$(CYAN)▶ Running Alembic migrations to head…$(RESET)"
+	docker compose -f docker-compose.dev.yml run --rm \
+		--no-deps alembic-check \
+		uv run alembic upgrade head
+	@echo "$(CYAN)✔ Migrations applied.$(RESET)"
 
 # ── Stop ─────────────────────────────────────────────────────────
 

@@ -2,6 +2,26 @@ name: batchbook-prod
 
 services:
 
+  # ── Migration guard (one-shot) ──────────────────────────────────
+  # Exits 0 if DB is at Alembic HEAD; exits 1 (and blocks backend) if not.
+  # Bypass: make prod BYPASS_UPDATE=1
+  alembic-check:
+    image: batchbook-backend:prod
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: prod
+      cache_from:
+        - batchbook-backend:dev
+        - batchbook-backend:prod
+    command: ["sh", "/app/scripts/check_migrations.sh"]
+    env_file:
+      - .env
+    environment:
+      - BYPASS_MIGRATION_CHECK=${BYPASS_UPDATE:-0}
+    networks:
+      - batchbook
+
   # ── FastAPI backend ─────────────────────────────────────────────
   backend:
     image: batchbook-backend:prod        # named image = reusable cache source
@@ -19,6 +39,9 @@ services:
     networks:
       - batchbook
     restart: unless-stopped
+    depends_on:
+      alembic-check:
+        condition: service_completed_successfully
 
   # ── React / nginx frontend ──────────────────────────────────────
   frontend:
