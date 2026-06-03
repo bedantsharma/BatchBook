@@ -61,11 +61,30 @@ async def test_get_or_create_creates_new_owner_when_not_found(service, mock_db):
 
     with (
         patch.object(service.owner_repo, "get_by_teacher_id", new=AsyncMock(return_value=None)),
+        patch.object(service.owner_repo, "get_by_phone", new=AsyncMock(return_value=None)),
         patch.object(service.owner_repo, "create_owner", new=create_mock),
     ):
         result = await service.get_or_create_after_otp(mock_db, teacher_id, "9876543210", "Alice", "a@b.com")
         assert result is new_owner
         create_mock.assert_called_once()
+
+
+async def test_get_or_create_updates_teacher_id_when_phone_exists_with_different_uuid(service, mock_db):
+    """Handles re-registration after Supabase account wipe: same phone, new UUID."""
+    old_teacher_id = uuid4()
+    new_teacher_id = uuid4()
+    existing_by_phone = _make_owner_schema(teacher_id=old_teacher_id)
+    updated = _make_owner_schema(teacher_id=new_teacher_id)
+    update_mock = AsyncMock(return_value=updated)
+
+    with (
+        patch.object(service.owner_repo, "get_by_teacher_id", new=AsyncMock(return_value=None)),
+        patch.object(service.owner_repo, "get_by_phone", new=AsyncMock(return_value=existing_by_phone)),
+        patch.object(service.owner_repo, "update_owner", new=update_mock),
+    ):
+        result = await service.get_or_create_after_otp(mock_db, new_teacher_id, "9876543210", "Alice", None)
+        assert result is updated
+        update_mock.assert_called_once_with(mock_db, existing_by_phone, {"teacher_id": new_teacher_id})
 
 
 # --- verify_otp ---

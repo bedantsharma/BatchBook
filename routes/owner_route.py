@@ -77,10 +77,7 @@ async def verify_otp(
         raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:
         logger.error(e)
-        raise HTTPException(
-            status_code=500,
-            detail="Could not communicate with Supabase server — check logs",
-        )
+        raise HTTPException(status_code=500, detail="Internal server error — check logs")
     return VerifyOwnerResponse(auth_token=access_token, refresh_token=refresh_token, aud=aud, teacher_id=str(teacher_id))
 
 

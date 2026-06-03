@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase import AsyncClient
 
@@ -20,11 +21,31 @@ class OwnerService:
         name: str | None,
         email: str | None,
     ) -> OwnerSchema:
+        # Primary lookup: existing session (returning owner)
         existing = await self.owner_repo.get_by_teacher_id(db, teacher_id)
         if existing:
             return existing
-        owner = OwnerSchema(teacher_id=teacher_id, phone_number=phone, name=name, email=email)
-        return await self.owner_repo.create_owner(db, owner)
+
+        # Secondary lookup: same phone, different UUID (Supabase account was re-created)
+        by_phone = await self.owner_repo.get_by_phone(db, phone)
+        if by_phone:
+            # OTP proves phone ownership — update to the new UUID
+            return await self.owner_repo.update_owner(db, by_phone, {"teacher_id": teacher_id})
+
+        # Brand-new owner
+        try:
+            owner = OwnerSchema(teacher_id=teacher_id, phone_number=phone, name=name, email=email)
+            return await self.owner_repo.create_owner(db, owner)
+        except IntegrityError:
+            # Lost a tiny race between the two lookups and the insert; fetch whatever won
+            await db.rollback()
+            existing = await self.owner_repo.get_by_teacher_id(db, teacher_id)
+            if existing:
+                return existing
+            by_phone = await self.owner_repo.get_by_phone(db, phone)
+            if by_phone:
+                return by_phone
+            raise
 
     async def verify_otp(
         self,
