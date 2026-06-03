@@ -1,14 +1,22 @@
+from datetime import date
+from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from loguru import logger
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase import AsyncClient
 from supabase_auth.errors import AuthApiError
 
 from clients.supabase_client import get_supabase_client
 from db.session import get_db
+from models.attendance_base import AttendanceSchema, AttendanceStatus
+from models.batch_base import BatchSchema
+from models.class_session_base import ClassSessionSchema
+from models.enrollment_base import EnrollmentSchema
+from models.fee_record_base import FeeRecordSchema
 from routes.requests.create_institute_request import CreateInstituteRequest
 from routes.requests.otp_generate_request import OtpGenerateRequest
 from routes.requests.owner_verify_otp_request import OwnerVerifyOtpRequest
@@ -16,6 +24,7 @@ from routes.requests.refresh_token_request import RefreshTokenRequest
 from routes.requests.update_owner_request import UpdateOwnerRequest
 from routes.responses.institute_response import InstituteResponse
 from routes.responses.owner_profile_response import OwnerProfileResponse
+from routes.responses.owner_stats_response import OwnerStatsResponse
 from routes.responses.verify_owner_response import VerifyOwnerResponse
 from services.institute_service import InstituteService, get_institute_service
 from services.owner_service import OwnerService, get_owner_service
@@ -197,3 +206,90 @@ async def get_institute(
         )
 
     return institute
+
+
+@router.get(
+    "/stats",
+    summary="Aggregate dashboard stats: students enrolled, fees collected, avg attendance",
+    response_model=OwnerStatsResponse,
+)
+async def get_owner_stats(
+    db: AsyncSession = Depends(get_db),
+    owner_service: OwnerServiceDep = None,
+    institute_service: InstituteServiceDep = None,
+    teacher_id: UUID = Depends(_get_current_teacher_id),
+):
+    """Return three headline stats for the owner's institute:
+
+    - ``students_enrolled``: count of active enrollments across all batches
+    - ``fees_collected_this_month``: total amount paid in the current calendar month
+    - ``avg_attendance_pct``: average attendance % across all sessions this month
+
+    All three are computed in a single DB round-trip each (3 queries total).
+    Returns zeros when there are no records yet so the UI always renders.
+    """
+    owner = await owner_service.get_owner_by_teacher_id(db=db, teacher_id=teacher_id)
+    if not owner:
+        raise HTTPException(status_code=404, detail="Owner record not found")
+
+    institute = await institute_service.get_institute_by_owner_id(db=db, owner_id=owner.id)
+    if not institute:
+        raise HTTPException(status_code=404, detail="No institute found")
+
+    today = date.today()
+    month_start = date(today.year, today.month, 1)
+    if today.month == 12:
+        month_end = date(today.year + 1, 1, 1)
+    else:
+        month_end = date(today.year, today.month + 1, 1)
+
+    # ── 1. Active enrollment count ────────────────────────────────────────────
+    enrollment_result = await db.execute(
+        select(func.count(EnrollmentSchema.id))
+        .join(BatchSchema, EnrollmentSchema.batch_id == BatchSchema.id)
+        .where(
+            BatchSchema.institute_id == institute.id,
+            EnrollmentSchema.is_active.is_(True),
+        )
+    )
+    students_enrolled: int = enrollment_result.scalar_one() or 0
+
+    # ── 2. Fees collected this month ──────────────────────────────────────────
+    fees_result = await db.execute(
+        select(func.coalesce(func.sum(FeeRecordSchema.amount_paid), 0))
+        .join(EnrollmentSchema, FeeRecordSchema.enrollment_id == EnrollmentSchema.id)
+        .join(BatchSchema, EnrollmentSchema.batch_id == BatchSchema.id)
+        .where(
+            BatchSchema.institute_id == institute.id,
+            FeeRecordSchema.month >= month_start,
+            FeeRecordSchema.month < month_end,
+        )
+    )
+    fees_collected_this_month: Decimal = Decimal(str(fees_result.scalar_one() or 0))
+
+    # ── 3. Average attendance % this month ────────────────────────────────────
+    att_result = await db.execute(
+        select(
+            func.count(AttendanceSchema.id).label("total"),
+            func.sum(
+                case((AttendanceSchema.status == AttendanceStatus.PRESENT, 1), else_=0)
+            ).label("present"),
+        )
+        .join(ClassSessionSchema, AttendanceSchema.session_id == ClassSessionSchema.id)
+        .join(BatchSchema, ClassSessionSchema.batch_id == BatchSchema.id)
+        .where(
+            BatchSchema.institute_id == institute.id,
+            ClassSessionSchema.date >= month_start,
+            ClassSessionSchema.date < month_end,
+        )
+    )
+    att_row = att_result.one()
+    total_att: int = att_row.total or 0
+    present_att: int = att_row.present or 0
+    avg_attendance_pct: float = round(present_att / total_att * 100, 1) if total_att > 0 else 0.0
+
+    return OwnerStatsResponse(
+        students_enrolled=students_enrolled,
+        fees_collected_this_month=fees_collected_this_month,
+        avg_attendance_pct=avg_attendance_pct,
+    )
