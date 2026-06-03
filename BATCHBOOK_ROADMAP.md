@@ -172,7 +172,7 @@ ClassSession ────────── Attendance (one session has one atte
 
 ---
 
-## PHASE 1 — Foundation ✅ Complete
+## PHASE 1 — Foundation ✅ INTEGRATED
 
 **What we're doing:** Rip out Firebase from the frontend, plug in Supabase instead, create the Owner + Parent + Teacher models in the backend, and build the bare skeleton of the owner dashboard.
 
@@ -254,7 +254,7 @@ ClassSession ────────── Attendance (one session has one atte
 
 ---
 
-## PHASE 2 — Core Data Models ✅ Complete
+## PHASE 2 — Core Data Models ✅ INTEGRATED
 
 ---
 
@@ -404,9 +404,11 @@ ClassSession ────────── Attendance (one session has one atte
 
 ---
 
-## PHASE 5 — Connect Student App to Real Backend ❌ Not started
+## PHASE 5 — Connect Student App to Real Backend ⬜ NOT-STARTED
 
-**What we're doing:** All the mock data in the student-facing dashboard gets replaced with real API calls. Rahul logs in and sees his actual 18/22 attendance, his actual ₹1500 fee status, and tomorrow's actual session.
+> **Covered by Phase 0.3.** The backend (`student_dashboard_route.py`) is already implemented and registered. The frontend (`dashboardService.js` + `StudentDashboard.jsx`) was wired to real APIs in Phase 0.3. Once Phase 0.3 is manually verified, mark Tasks 5.1 and 5.2 as ✅ INTEGRATED.
+
+**What we're doing:** All the mock data in the student-facing dashboard gets replaced with real API calls. A parent logs in and sees their child's actual attendance, fee status, and upcoming schedule.
 
 ---
 
