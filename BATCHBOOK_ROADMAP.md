@@ -20,8 +20,8 @@ A vertical SaaS product for India's small coaching institutes (tuition centers w
 
 | Repo | Path | Stack | Status |
 |------|------|-------|--------|
-| Backend API | `~/PycharmProjects/BatchBook` | FastAPI + PostgreSQL (Supabase) | **Phases 1–4 + 6 INTEGRATED (221 tests). Phase 0 in progress.** |
-| Frontend | `~/WebstormProjects/batchbookui` | React 19 + Material-UI | **Owner dashboard fully integrated. Student dashboard wired to real APIs (Phase 0). Teacher dashboard is a stub (deferred).** |
+| Backend API | `~/PycharmProjects/BatchBook` | FastAPI + PostgreSQL (Supabase) | **Phases 0–4 + 6 INTEGRATED (249 tests). GET /owner/stats PR open (Task 6.3).** |
+| Frontend | `~/WebstormProjects/batchbookui` | React 19 + Material-UI | **Owner dashboard fully integrated + stats bar (Task 6.3 PR open). Student dashboard wired to real APIs. Teacher dashboard is a stub (deferred).** |
 
 ---
 
@@ -39,9 +39,8 @@ A vertical SaaS product for India's small coaching institutes (tuition centers w
 - **221 tests passing** (pytest) across auth, owner, fee, attendance, test score services and routes
 
 ### Backend — What Is Missing
-- No Razorpay UPI payment link generation (Task 3.3) — **needs your Razorpay API keys**
 - No WhatsApp fee reminders or absence alerts via WATI (Tasks 3.4, 4.2) — **needs your WATI credentials + template approval**
-- No student-facing read APIs for the student dashboard (Task 5.1)
+- `GET /owner/stats` aggregate endpoint — **PR open (Task 6.3)**
 
 ### Frontend — What Works Today
 - Firebase removed; Supabase OTP auth wired in `PhoneLogin.jsx` + `OtpVerification.jsx`
@@ -113,25 +112,23 @@ ClassSession ────────── Attendance (one session has one atte
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| **0** | Integration stabilization — role routing, setup gate, student live data | ⬜ NOT-STARTED (in progress) |
+| **0** | Integration stabilization — role routing, setup gate, student live data | ✅ INTEGRATED |
 | **1** | Foundation: fix auth, create Owner model, basic owner dashboard shell | ✅ INTEGRATED |
 | **2** | Core data: Batch + Enrollment, student management UI | ✅ INTEGRATED |
 | **3** | Fee Management MVP (the product people pay for) | 🟡 PARTIAL — 3.1 ✅ 3.2 ✅ 3.3 ✅ 3.5 ✅ · 3.4 🚫 BLOCKED (WATI) |
 | **4** | Attendance + WhatsApp parent alerts | 🟡 PARTIAL — 4.1 ✅ 4.3 ✅ 4.4 ✅ · 4.2 🚫 BLOCKED (WATI) |
-| **5** | Connect student app to real backend | ⬜ NOT-STARTED (covered by Phase 0.3) |
+| **5** | Connect student app to real backend | ✅ INTEGRATED (covered by Phase 0.3) |
 | **6** | Polish, tests, performance tracker | 🟡 PARTIAL — 6.1 ✅ 6.2 ✅ 6.4 ✅ · 6.3 🔧 PARTIAL |
 
 ---
 
-## PHASE 0 — Integration Stabilization ⬜ IN PROGRESS
+## PHASE 0 — Integration Stabilization ✅ INTEGRATED
 
-**What we're doing:** Fixing three integration gaps that were left when features were built in isolation. Nothing new is being built — we are making what already exists actually work together end-to-end.
-
-**The agent MUST complete all Phase 0 tasks before picking any Phase 1–6 task.**
+**What we did:** Fixed three integration gaps that were left when features were built in isolation. All code is merged to master via PR #11 + PR #12 (batchbookui).
 
 ---
 
-### Task 0.1 — Frontend: Role-aware routing ⬜ IN PROGRESS
+### Task 0.1 — Frontend: Role-aware routing ✅ INTEGRATED
 
 **Why:** ProtectedRoute only checked session existence. Any logged-in user could reach any dashboard URL by typing it directly.
 
@@ -147,7 +144,7 @@ ClassSession ────────── Attendance (one session has one atte
 
 ---
 
-### Task 0.2 — Frontend: Owner setup gate ⬜ IN PROGRESS
+### Task 0.2 — Frontend: Owner setup gate ✅ INTEGRATED
 
 **Why:** A new owner (no institute yet) who completes OTP was sent directly to `/owner/dashboard`. Every API call that needs `institute_id` silently failed.
 
@@ -157,7 +154,7 @@ ClassSession ────────── Attendance (one session has one atte
 
 ---
 
-### Task 0.3 — Backend + Frontend: Student dashboard live data ⬜ IN PROGRESS
+### Task 0.3 — Backend + Frontend: Student dashboard live data ✅ INTEGRATED
 
 **Why:** `dashboardService.js` on master was 100% hardcoded mock data.
 
@@ -404,7 +401,7 @@ ClassSession ────────── Attendance (one session has one atte
 
 ---
 
-## PHASE 5 — Connect Student App to Real Backend ⬜ NOT-STARTED
+## PHASE 5 — Connect Student App to Real Backend ✅ INTEGRATED
 
 > **Covered by Phase 0.3.** The backend (`student_dashboard_route.py`) is already implemented and registered. The frontend (`dashboardService.js` + `StudentDashboard.jsx`) was wired to real APIs in Phase 0.3. Once Phase 0.3 is manually verified, mark Tasks 5.1 and 5.2 as ✅ INTEGRATED.
 
@@ -456,12 +453,14 @@ ClassSession ────────── Attendance (one session has one atte
 
 ---
 
-### Task 6.3 — Frontend: Performance tab + analytics 🟡 Partial
+### Task 6.3 — Frontend: Performance tab + analytics 🟡 PR-OPEN
 
 - [x] Add "Tests" to owner sidebar
 - [x] Create score entry form (batch/student selector, test name, subject, max marks, obtained marks)
 - [x] Create student score table with `needs_attention` badge
-- [ ] **Add to `OwnerDashboard.jsx` header: "X students enrolled | ₹Y collected this month | Z% avg attendance"** — needs fee dashboard + attendance summary API calls wired in
+- [x] **`GET /owner/stats` endpoint** — 3 aggregate queries (enrolled, fees collected, avg attendance); 7 tests
+- [x] **`StatsBar` component in `OwnerDashboard.jsx`** — 3 pill badges with live data; graceful 0 fallback on error
+- [ ] **Verified by:** _(pending merge of PR #24 / batchbookui PR #14 → use the claude/exciting-galileo-MwlL2 / claude/peaceful-lamport-MwlL2 PR instead)_
 
 ---
 
