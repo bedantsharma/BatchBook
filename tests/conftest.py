@@ -1,3 +1,12 @@
+import os
+
+# Set minimal env vars before importing app so db/session.py can initialize.
+# Tests use in-memory SQLite; these values are never used for real connections.
+os.environ.setdefault("PROJECT_NAME", "BatchBookTest")
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
+os.environ.setdefault("SUPABASE_KEY", "test-key")
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
