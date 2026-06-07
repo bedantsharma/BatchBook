@@ -1,3 +1,11 @@
+import os
+
+# Must be set before app import so Pydantic Settings validation succeeds in envs without .env
+os.environ.setdefault("PROJECT_NAME", "BatchBook-Test")
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
+os.environ.setdefault("SUPABASE_KEY", "test-key")
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
