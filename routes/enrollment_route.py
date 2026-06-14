@@ -13,6 +13,7 @@ from db.session import get_db
 from models.batch_base import BatchSchema
 from models.student_base import StudentSchema
 from routes.requests.create_enrollment_request import CreateEnrollmentRequest
+from routes.requests.invite_student_request import InviteStudentRequest
 from routes.requests.update_enrollment_request import UpdateEnrollmentRequest
 from routes.responses.enrollment_response import EnrollmentResponse
 from services.enrollment_service import EnrollmentService, get_enrollment_service
@@ -96,6 +97,66 @@ async def _verify_student_belongs_to_institute(
             status_code=403,
             detail="Student does not belong to your institute",
         )
+
+
+# ─── POST /enrollment/invite ──────────────────────────────────────────────────
+
+
+@router.post(
+    "/invite",
+    summary="Owner invites a new student: creates parent + student + enrollment in one call",
+    response_model=EnrollmentResponse,
+    status_code=201,
+)
+async def invite_student(
+    request: InviteStudentRequest,
+    enrollment_service: EnrollmentServiceDep,
+    owner_service: OwnerServiceDep,
+    institute_service: InstituteServiceDep,
+    db: AsyncSession = Depends(get_db),
+    owner_user_id: UUID = Depends(_get_current_owner_user_id),
+):
+    """Create a parent + student record pre-linked to the owner's institute, then enroll.
+
+    The parent can log in via OTP at any time and will see their child's data immediately.
+    A WATI WhatsApp notification is attempted (currently a stub until WATI credentials arrive).
+    """
+    from services.notification_service import send_enrollment_invite
+
+    institute_id = await _resolve_institute_id(db, owner_user_id, owner_service, institute_service)
+    await _verify_batch_belongs_to_institute(db, request.batch_id, institute_id)
+
+    inst = await institute_service.institute_repo.get_by_id(db, institute_id)
+    institute_name = inst.name if inst else "your institute"
+    join_code = inst.join_code if inst else ""
+
+    try:
+        enrollment = await enrollment_service.invite_student(
+            db=db,
+            student_name=request.student_name,
+            parent_phone=request.parent_phone,
+            institute_id=institute_id,
+            batch_id=request.batch_id,
+            due_day=request.due_day,
+            first_month_amount=request.first_month_amount,
+            parent_name=request.parent_name,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        logger.error(e)
+        raise HTTPException(status_code=500, detail="Failed to invite student — check logs")
+
+    base_url = "https://batchbookui.vercel.app"  # TODO: replace with real domain after Task C.1
+    join_url = f"{base_url}/join/{join_code}"
+    await send_enrollment_invite(
+        parent_phone=request.parent_phone,
+        student_name=request.student_name,
+        institute_name=institute_name,
+        join_url=join_url,
+    )
+
+    return enrollment
 
 
 # ─── POST /enrollment/ ────────────────────────────────────────────────────────

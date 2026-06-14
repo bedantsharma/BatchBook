@@ -31,6 +31,7 @@ def _make_institute(owner_id=1):
     i.owner_id = owner_id
     i.name = "Test Institute"
     i.city = "Delhi"
+    i.join_code = "TEST0001"
     return i
 
 

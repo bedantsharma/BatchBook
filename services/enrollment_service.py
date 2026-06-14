@@ -4,7 +4,10 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.enrollment_base import EnrollmentSchema
+from models.parent_base import ParentSchema
+from models.student_base import StudentSchema
 from repositories.enrollment_repository import EnrollmentRepository
+from repositories.parent_repository import ParentRepository
 
 
 class EnrollmentService:
@@ -18,6 +21,7 @@ class EnrollmentService:
 
     def __init__(self) -> None:
         self.enrollment_repo = EnrollmentRepository()
+        self.parent_repo = ParentRepository()
 
     async def enroll_student(
         self,
@@ -117,6 +121,57 @@ class EnrollmentService:
         if not enrollment:
             raise ValueError("Enrollment not found")
         await self.enrollment_repo.deactivate(db, enrollment)
+
+
+    async def invite_student(
+        self,
+        db: AsyncSession,
+        student_name: str,
+        parent_phone: str,
+        institute_id: int,
+        batch_id: int,
+        due_day: int | None = None,
+        first_month_amount: Decimal | None = None,
+        parent_name: str | None = None,
+    ) -> EnrollmentSchema:
+        """Owner-initiated enrollment: create/find parent + student, then enroll.
+
+        Creates the Parent record (pre-linked to the institute) so the parent can
+        log in later via OTP and see their child's data immediately.
+
+        Raises:
+            ValueError: If the student is already actively enrolled in this batch.
+        """
+        # Find or create parent by phone
+        parent = await self.parent_repo.get_by_phone(db, parent_phone)
+        if parent is None:
+            parent = ParentSchema(
+                phone_number=parent_phone,
+                name=parent_name,
+                institute_id=institute_id,
+            )
+            db.add(parent)
+            await db.flush()  # get parent.id without committing
+        elif parent.institute_id is None:
+            parent.institute_id = institute_id
+            await db.flush()
+
+        # Create student linked to parent and institute
+        student = StudentSchema(
+            name=student_name,
+            parent_id=parent.id,
+            institute_id=institute_id,
+        )
+        db.add(student)
+        await db.flush()  # get student.id
+
+        return await self.enroll_student(
+            db=db,
+            student_id=student.id,
+            batch_id=batch_id,
+            due_day=due_day,
+            first_month_amount=first_month_amount,
+        )
 
 
 def get_enrollment_service() -> EnrollmentService:

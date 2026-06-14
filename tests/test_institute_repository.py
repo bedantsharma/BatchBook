@@ -38,11 +38,15 @@ async def _create_owner(db_session, owner_repo: OwnerRepository) -> OwnerSchema:
     return await owner_repo.create_owner(db_session, owner)
 
 
+def _institute(owner_id: int, name: str, city: str, code: str) -> InstituteSchema:
+    return InstituteSchema(owner_id=owner_id, name=name, city=city, join_code=code)
+
+
 # --- create ---
 
 async def test_create_institute_persists_record(db_session, repo, owner_repo):
     owner = await _create_owner(db_session, owner_repo)
-    institute = InstituteSchema(owner_id=owner.id, name="Sharma Classes", city="Gurugram")
+    institute = _institute(owner.id, "Sharma Classes", "Gurugram", "SHRM0001")
 
     created = await repo.create(db_session, institute)
 
@@ -50,14 +54,13 @@ async def test_create_institute_persists_record(db_session, repo, owner_repo):
     assert created.owner_id == owner.id
     assert created.name == "Sharma Classes"
     assert created.city == "Gurugram"
+    assert created.join_code == "SHRM0001"
     assert created.created_at is not None
 
 
 async def test_create_institute_sets_all_fields(db_session, repo, owner_repo):
     owner = await _create_owner(db_session, owner_repo)
-    institute = InstituteSchema(owner_id=owner.id, name="Mehta Coaching", city="Jaipur")
-
-    created = await repo.create(db_session, institute)
+    created = await repo.create(db_session, _institute(owner.id, "Mehta Coaching", "Jaipur", "META0001"))
 
     assert created.name == "Mehta Coaching"
     assert created.city == "Jaipur"
@@ -67,7 +70,7 @@ async def test_create_institute_sets_all_fields(db_session, repo, owner_repo):
 
 async def test_get_by_owner_id_returns_institute(db_session, repo, owner_repo):
     owner = await _create_owner(db_session, owner_repo)
-    await repo.create(db_session, InstituteSchema(owner_id=owner.id, name="Test Institute", city="Delhi"))
+    await repo.create(db_session, _institute(owner.id, "Test Institute", "Delhi", "TEST0001"))
 
     found = await repo.get_by_owner_id(db_session, owner.id)
 
@@ -84,10 +87,37 @@ async def test_get_by_owner_id_returns_none_when_not_found(db_session, repo):
 async def test_get_by_owner_id_does_not_return_other_owners_institute(db_session, repo, owner_repo):
     owner_a = await _create_owner(db_session, owner_repo)
     owner_b = await _create_owner(db_session, owner_repo)
-    await repo.create(db_session, InstituteSchema(owner_id=owner_a.id, name="A Classes", city="Delhi"))
+    await repo.create(db_session, _institute(owner_a.id, "A Classes", "Delhi", "ACLS0001"))
 
     result = await repo.get_by_owner_id(db_session, owner_b.id)
 
+    assert result is None
+
+
+# --- get_by_join_code ---
+
+async def test_get_by_join_code_returns_institute(db_session, repo, owner_repo):
+    owner = await _create_owner(db_session, owner_repo)
+    await repo.create(db_session, _institute(owner.id, "Join Test", "Mumbai", "JOIN0001"))
+
+    found = await repo.get_by_join_code(db_session, "JOIN0001")
+
+    assert found is not None
+    assert found.join_code == "JOIN0001"
+
+
+async def test_get_by_join_code_case_insensitive(db_session, repo, owner_repo):
+    owner = await _create_owner(db_session, owner_repo)
+    await repo.create(db_session, _institute(owner.id, "Case Test", "Pune", "CASE0001"))
+
+    found = await repo.get_by_join_code(db_session, "case0001")
+
+    assert found is not None
+    assert found.name == "Case Test"
+
+
+async def test_get_by_join_code_returns_none_for_unknown_code(db_session, repo):
+    result = await repo.get_by_join_code(db_session, "XXXXXXXX")
     assert result is None
 
 
@@ -95,9 +125,7 @@ async def test_get_by_owner_id_does_not_return_other_owners_institute(db_session
 
 async def test_update_changes_name_and_city(db_session, repo, owner_repo):
     owner = await _create_owner(db_session, owner_repo)
-    institute = await repo.create(
-        db_session, InstituteSchema(owner_id=owner.id, name="Old Name", city="Old City")
-    )
+    institute = await repo.create(db_session, _institute(owner.id, "Old Name", "Old City", "OLD00001"))
 
     updated = await repo.update(db_session, institute, {"name": "New Name", "city": "New City"})
 
@@ -107,9 +135,7 @@ async def test_update_changes_name_and_city(db_session, repo, owner_repo):
 
 async def test_update_only_changes_specified_fields(db_session, repo, owner_repo):
     owner = await _create_owner(db_session, owner_repo)
-    institute = await repo.create(
-        db_session, InstituteSchema(owner_id=owner.id, name="Original Name", city="Original City")
-    )
+    institute = await repo.create(db_session, _institute(owner.id, "Original Name", "Original City", "ORIG0001"))
 
     await repo.update(db_session, institute, {"city": "New City"})
 

@@ -11,4 +11,5 @@ class InstituteSchema(Base):
     owner_id = Column(Integer, ForeignKey("Owner.id"), nullable=False, unique=True)
     name = Column(String, nullable=False)
     city = Column(String, nullable=False)
+    join_code = Column(String(8), nullable=False, unique=True, index=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
