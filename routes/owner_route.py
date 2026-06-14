@@ -22,6 +22,7 @@ from routes.requests.otp_generate_request import OtpGenerateRequest
 from routes.requests.owner_verify_otp_request import OwnerVerifyOtpRequest
 from routes.requests.refresh_token_request import RefreshTokenRequest
 from routes.requests.update_owner_request import UpdateOwnerRequest
+from routes.responses.institute_qr_response import InstituteQRResponse
 from routes.responses.institute_response import InstituteResponse
 from routes.responses.owner_profile_response import OwnerProfileResponse
 from routes.responses.owner_stats_response import OwnerStatsResponse
@@ -283,4 +284,36 @@ async def get_owner_stats(
         enrolled_students=enrolled_students,
         fees_collected_this_month=fees_collected_this_month,
         avg_attendance_this_month=avg_attendance,
+    )
+
+
+# ─── GET /owner/institute/qr ──────────────────────────────────────────────────
+
+
+@router.get(
+    "/institute/qr",
+    summary="Get the institute's join code and QR URL for sharing with parents",
+    response_model=InstituteQRResponse,
+)
+async def get_institute_qr(
+    owner_service: OwnerServiceDep,
+    institute_service: InstituteServiceDep,
+    db: AsyncSession = Depends(get_db),
+    owner_user_id: UUID = Depends(_get_current_teacher_id),
+):
+    owner = await owner_service.get_owner_by_teacher_id(db=db, teacher_id=owner_user_id)
+    if not owner:
+        raise HTTPException(status_code=404, detail="Owner record not found")
+    institute = await institute_service.get_institute_by_owner_id(db=db, owner_id=owner.id)
+    if not institute:
+        raise HTTPException(status_code=404, detail="Institute not set up yet")
+
+    base_url = "https://batchbookui.vercel.app"  # TODO: replace with real domain after Task C.1
+    join_url = f"{base_url}/join/{institute.join_code}"
+
+    return InstituteQRResponse(
+        join_code=institute.join_code,
+        join_url=join_url,
+        institute_name=institute.name,
+        owner_phone=owner.phone_number,
     )

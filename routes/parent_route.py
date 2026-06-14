@@ -9,10 +9,13 @@ from supabase_auth.errors import AuthApiError
 
 from clients.supabase_client import get_supabase_client
 from db.session import get_db
+from services.institute_service import InstituteService, get_institute_service
 from services.parent_service import ParentService, get_parent_service
+from routes.requests.join_institute_request import JoinInstituteRequest
 from routes.requests.otp_generate_request import OtpGenerateRequest
 from routes.requests.parent_verify_otp_request import ParentVerifyOtpRequest
 from routes.requests.refresh_token_request import RefreshTokenRequest
+from routes.responses.institute_search_response import InstituteSearchResponse
 from routes.responses.parent_profile_response import ParentProfileResponse, StudentSummary
 from routes.responses.verify_parent_response import VerifyParentResponse, StudentSummaryInToken
 
@@ -20,6 +23,7 @@ router = APIRouter(prefix="/parent")
 
 SupabaseClient = Annotated[AsyncClient, Depends(get_supabase_client)]
 ParentServiceDep = Annotated[ParentService, Depends(get_parent_service)]
+InstituteServiceDep = Annotated[InstituteService, Depends(get_institute_service)]
 
 
 async def _get_current_user_id(
@@ -140,4 +144,85 @@ async def refresh_token(request: RefreshTokenRequest, supabase: SupabaseClient):
         aud=data.user.aud,
         user_id=str(data.user.id),
         children=[],
+    )
+
+
+# ─── GET /parent/institute/search ─────────────────────────────────────────────
+
+
+@router.get(
+    "/institute/search",
+    summary="Find an institute by the owner's phone number (public — no auth required)",
+    response_model=InstituteSearchResponse,
+)
+async def search_institute_by_owner_phone(
+    owner_phone: str,
+    institute_service: InstituteServiceDep,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public endpoint — parents use this to find their institute before claiming their account."""
+    digits = owner_phone.strip().replace(" ", "").replace("-", "")
+    if not digits.isdigit() or len(digits) != 10:
+        raise HTTPException(status_code=422, detail="owner_phone must be a 10-digit Indian mobile number")
+
+    result = await institute_service.find_by_owner_phone(db=db, owner_phone=digits)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No institute found for that phone number")
+
+    return InstituteSearchResponse(
+        id=result.institute.id,
+        name=result.institute.name,
+        city=result.institute.city,
+        join_code=result.institute.join_code,
+        owner_name=result.owner.name,
+    )
+
+
+# ─── POST /parent/join-institute ──────────────────────────────────────────────
+
+
+@router.post(
+    "/join-institute",
+    summary="Parent links their account to an institute using the join code",
+    response_model=InstituteSearchResponse,
+)
+async def join_institute(
+    request: JoinInstituteRequest,
+    parent_service: ParentServiceDep,
+    institute_service: InstituteServiceDep,
+    db: AsyncSession = Depends(get_db),
+    user_id: UUID = Depends(_get_current_user_id),
+):
+    """Link an authenticated parent to an institute via join code (from QR or owner).
+
+    Returns 409 if the parent is already linked to a different institute.
+    """
+    institute = await institute_service.get_by_join_code(db=db, join_code=request.join_code)
+    if not institute:
+        raise HTTPException(status_code=404, detail="Invalid join code — no institute found")
+
+    parent = await parent_service.get_parent_by_user_id(db=db, user_id=user_id)
+    if not parent:
+        raise HTTPException(status_code=404, detail="Parent record not found")
+
+    if parent.institute_id is not None and parent.institute_id != institute.id:
+        raise HTTPException(
+            status_code=409,
+            detail="You are already linked to a different institute. Contact support to switch.",
+        )
+
+    if parent.institute_id != institute.id:
+        await parent_service.update_parent(db=db, user_id=user_id, updates={"institute_id": institute.id})
+
+    from models.owner_base import OwnerSchema
+    from sqlalchemy import select as _sel
+    owner_res = await db.execute(_sel(OwnerSchema).where(OwnerSchema.id == institute.owner_id))
+    owner = owner_res.scalar_one_or_none()
+
+    return InstituteSearchResponse(
+        id=institute.id,
+        name=institute.name,
+        city=institute.city,
+        join_code=institute.join_code,
+        owner_name=owner.name if owner else None,
     )
