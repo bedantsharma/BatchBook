@@ -58,7 +58,7 @@
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| **A** | Fix ship-blockers — nginx, stats, student tabs | ⬜ NOT-STARTED |
+| **A** | Fix ship-blockers — nginx, stats, student tabs | 🟡 PARTIAL — A.1 PR-OPEN · A.2 ✅ done · A.3–A.5 ⬜ |
 | **B** | Landing page (real marketing page + WATI website URL) | ⬜ NOT-STARTED |
 | **C** | Deployment — hosting, domain, SSL, CI/CD | ⬜ NOT-STARTED |
 | **D** | WATI notifications (fee reminders, absence alerts) | 🚫 BLOCKED (credentials) |
@@ -91,18 +91,18 @@
 
 ---
 
-### Task A.2 — Wire OwnerDashboard header stats
+### Task A.2 — Wire OwnerDashboard header stats ✅ DONE (code merged, pending manual verification)
 
 **Why:** The dashboard header currently shows no live data. An owner opening their app for the first time sees a blank header instead of "12 students enrolled | ₹8,400 collected | 87% avg attendance" — the numbers that prove the product is working.
 
 **Backend is already done** — `GET /owner/stats` exists and returns `{ total_students, fee_collected_this_month, avg_attendance_pct }`.
 
-- [ ] In `OwnerDashboard.jsx`: add a `useEffect` on mount that calls `GET /owner/stats` via `ownerService.js`
-- [ ] Add `getOwnerStats()` to `ownerService.js` if not already there
-- [ ] Render the 3 stats in the dashboard header bar
-- [ ] Handle loading state (show `—` while fetching) and error state (silently hide the bar)
+- [x] In `OwnerDashboard.jsx`: `useEffect` on mount calls `getOwnerStats()` via `ownerService.js` (commit: `0e0bab5`)
+- [x] `getOwnerStats()` added to `ownerService.js`
+- [x] `StatsBar` component renders enrolled students, ₹ collected, avg attendance %
+- [x] Loading state shows `—` while fetching; errors hide the bar silently
 
-**Verified by:** _(pending)_
+**Verified by:** _(pending manual check in browser — run `make dev`, log in as owner)_
 
 ---
 
