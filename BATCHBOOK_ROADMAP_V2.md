@@ -58,8 +58,8 @@
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| **A** | Fix ship-blockers — nginx, stats, student tabs | ⬜ NOT-STARTED |
-| **B** | Landing page (real marketing page + WATI website URL) | ⬜ NOT-STARTED |
+| **A** | Fix ship-blockers — nginx, stats, student tabs | 🟡 PARTIAL — A.1 ✅ A.2 ✅ A.4 ✅ A.5 ✅ · A.3 pending manual test |
+| **B** | Landing page (real marketing page + WATI website URL) | ✅ DONE — deployed at batchbookui.vercel.app |
 | **C** | Deployment — hosting, domain, SSL, CI/CD | ⬜ NOT-STARTED |
 | **D** | WATI notifications (fee reminders, absence alerts) | 🚫 BLOCKED (credentials) |
 | **E** | Polish — multi-child, streak, receipts, E2E CI | ⬜ NOT-STARTED |
@@ -81,13 +81,13 @@
 
 **Why this is critical:** In the Docker prod stack, the React app is served by nginx. nginx proxies API calls to the FastAPI backend. The current config only proxies `/student/*` and `/owner/*`. Every owner dashboard action (create batch, mark fee, take attendance) hits `/batch/*`, `/fee/*`, `/attendance/*`, `/enrollment/*`, `/scores/*` — all of which nginx currently serves as 404s. The entire owner dashboard breaks in production.
 
-- [ ] Update `batchbookui/nginx.conf` — extend the proxy location regex to cover all backend prefixes:
+- [x] Update `batchbookui/nginx.conf` — extend the proxy location regex to cover all backend prefixes:
   ```nginx
   location ~ ^/(student|owner|batch|fee|attendance|enrollment|scores|parent|teacher|docs|redoc|openapi\.json)(/.*)?$ {
   ```
 - [ ] Verify: `make prod` → open `http://localhost` → owner login → create a batch → confirm no 404s in browser network tab
 
-**Verified by:** _(pending)_
+**Verified by:** _(pending manual smoke test with `make prod`)_
 
 ---
 
@@ -97,12 +97,12 @@
 
 **Backend is already done** — `GET /owner/stats` exists and returns `{ total_students, fee_collected_this_month, avg_attendance_pct }`.
 
-- [ ] In `OwnerDashboard.jsx`: add a `useEffect` on mount that calls `GET /owner/stats` via `ownerService.js`
-- [ ] Add `getOwnerStats()` to `ownerService.js` if not already there
-- [ ] Render the 3 stats in the dashboard header bar
-- [ ] Handle loading state (show `—` while fetching) and error state (silently hide the bar)
+- [x] In `OwnerDashboard.jsx`: add a `useEffect` on mount that calls `GET /owner/stats` via `ownerService.js`
+- [x] Add `getOwnerStats()` to `ownerService.js` if not already there
+- [x] Render the 3 stats in the dashboard header bar
+- [x] Handle loading state (show `—` while fetching) and error state (silently hide the bar)
 
-**Verified by:** _(pending)_
+**Verified by:** _(code already implemented — pending manual smoke test)_
 
 ---
 
@@ -128,11 +128,11 @@ For each flow, write what you saw under "Verified by" in this file.
 
 **Why:** Razorpay backend is done. But parents who see "Fee Due" in the student dashboard have no button to pay. The core value prop — one-click fee payment — is invisible.
 
-- [ ] In `dashboardService.js`, add `getFeeStatus()` (already exists — check it returns `{ payment_link }` field)
-- [ ] In `StudentDashboard.jsx` Overview tab: if `feeDue === true`, show a "Pay Now" button that opens `payment_link` in a new tab
-- [ ] If `payment_link` is null (owner hasn't generated it yet), show "Contact your institute" instead of a broken button
+- [x] In `dashboardService.js`, add `getFeeStatus()` (already exists — check it returns `{ payment_link }` field)
+- [x] In `StudentDashboard.jsx` Overview tab: if `feeDue === true`, show a "Pay Now" button that opens `payment_link` in a new tab
+- [x] If `payment_link` is null (owner hasn't generated it yet), show "Contact your institute" instead of a broken button
 
-**Verified by:** _(pending)_
+**Verified by:** _(pending manual smoke test)_
 
 ---
 
@@ -140,12 +140,12 @@ For each flow, write what you saw under "Verified by" in this file.
 
 **Why:** The student sidebar shows 4 tabs (Overview, Batches, Schedule, Fees) but 3 of them are `cursor: not-allowed` stubs. A parent who taps "Schedule" and sees nothing will think the app is broken.
 
-- [ ] Create `BatchesTab.jsx` inside `components/student/` — calls `GET /student/me/attendance` (already fetched in Overview) and lists batch names, subjects, and monthly attendance %
-- [ ] Create `ScheduleTab.jsx` — calls `getTodaySchedule()` and `getUpcomingEvents()` (already fetched), displays them in a list grouped by day
-- [ ] Create `FeesTab.jsx` — calls `getFeeStatus()`, shows current month status per batch, "Pay Now" button if `payment_link` present
-- [ ] In `StudentDashboard.jsx`: replace `cursor: not-allowed` stubs with real content components; track `activeTab` state and render the right component
+- [x] Create `BatchesTab` inside `StudentDashboard.jsx` — lists batch names, subjects, and monthly attendance %
+- [x] Create `ScheduleTab` — displays today's classes + upcoming events grouped by day
+- [x] Create `FeesTab` — shows current month status per batch, "Pay Now" button if `payment_link` present
+- [x] In `StudentDashboard.jsx`: replaced `cursor: not-allowed` stubs with real content components; `activeTab` state drives rendering
 
-**Verified by:** _(pending)_
+**Verified by:** _(pending manual smoke test)_
 
 ---
 
@@ -163,21 +163,16 @@ For each flow, write what you saw under "Verified by" in this file.
 
 Required sections:
 
-- [ ] **Hero:** "Run your coaching institute from your phone. Fees, attendance, tests — all in one place." + "Get Started Free" CTA button → `/onboarding`
-- [ ] **3 feature cards:** (1) Fee management — collect fees, send reminders; (2) Attendance — mark in 30 seconds, parents get alerts; (3) Test scores — track who needs attention
-- [ ] **How it works:** 3 steps: Sign up → Add students → Start managing (with simple icons)
-- [ ] **Social proof placeholder:** "Join 50+ coaching institutes" (change the number when you have real data)
-- [ ] **Footer:** BatchBook © 2026 · Privacy Policy link · Contact email (bedant's email or a hello@ alias)
-- [ ] **Privacy Policy page** at `/privacy-policy` — required by Meta for WATI verification. Must state: what data you collect (phone numbers, student attendance), how it's used, that you don't sell it. A simple one-paragraph page is fine.
-- [ ] **Add `/privacy-policy` route in `App.jsx`**
+- [x] **Hero:** headline + "Get Started Free" CTA → `/onboarding`
+- [x] **3 feature cards:** Fee Management, Attendance, Test Scores
+- [x] **How it works:** 3 numbered steps + second CTA
+- [x] **Social proof placeholder:** "Join 50+ coaching institutes"
+- [x] **Footer:** BatchBook © 2026 · Privacy Policy link · contact email
+- [x] **Privacy Policy page** at `/privacy-policy` — covers data collection, usage, retention, contact
+- [x] **Add `/privacy-policy` route in `App.jsx`**
+- [x] **Fix Vercel SPA routing** — `vercel.json` rewrite rule so direct URL hits don't 404
 
-Design guidance:
-- Reuse the existing dark theme from `App.jsx` (dark background, purple primary)
-- Mobile-first — target user is on a phone
-- No animations needed, no parallax — keep it fast
-- Keep it in `src/components/LandingPage.jsx` (don't create a new file unless the file gets unwieldy)
-
-**Verified by:** _(pending — visual check in browser)_
+**Verified by:** _(deployed at batchbookui.vercel.app — pending visual check)_
 
 ---
 
@@ -187,14 +182,12 @@ Design guidance:
 
 Recommended approach: **Vercel** (free, instant, auto-deploys from git push, gives HTTPS)
 
-- [ ] Push `batchbookui` frontend to its own GitHub repo (already at `github.com/bedantsharma/batchbookui`)
-- [ ] Sign up at vercel.com → "Import Project" → connect the `batchbookui` repo
-- [ ] Set env vars in Vercel: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
-- [ ] For now, set `VITE_API_URL` to `http://localhost:8000` — the landing page doesn't call the backend, so this doesn't matter yet
-- [ ] Vercel gives you a URL like `batchbookui.vercel.app` — use this as your business URL for WATI
+- [x] Push `batchbookui` frontend to its own GitHub repo
+- [x] Sign up at vercel.com → import `batchbookui` repo → set env vars → deployed
+- [x] Vercel URL: **https://batchbookui.vercel.app** — submit this to WATI as business URL
 - [ ] Later (Task C.3), point your custom domain here and update the WATI registration
 
-**Verified by:** _(pending — URL must be live and reachable)_
+**Verified by:** _(live at batchbookui.vercel.app — /privacy-policy confirmed working after vercel.json fix)_
 
 ---
 
