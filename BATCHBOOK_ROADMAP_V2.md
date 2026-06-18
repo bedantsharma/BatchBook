@@ -73,7 +73,7 @@
 
 ---
 
-## PHASE A — Fix Ship-Blockers ⬜ NOT-STARTED
+## PHASE A — Fix Ship-Blockers 🟡 PARTIAL (A.3 pending manual test)
 
 ---
 
