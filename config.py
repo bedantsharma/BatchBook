@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     razorpay_key_secret: str | None = None
     wati_api_endpoint: str | None = None
     wati_api_token: str | None = None
+    rate_limit_enabled: bool = True
 
 
 @lru_cache

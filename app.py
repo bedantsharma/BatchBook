@@ -5,10 +5,14 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from supabase._async.client import create_client
 
 from clients import supabase_client
 from config import get_settings
+from rate_limiter import limiter
 from routes.attendance_route import router as attendance_router
 from routes.batch_route import router as batch_router
 from routes.enrollment_route import router as enrollment_router
@@ -41,6 +45,10 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

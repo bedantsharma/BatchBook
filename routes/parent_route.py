@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase import AsyncClient
@@ -9,15 +9,16 @@ from supabase_auth.errors import AuthApiError
 
 from clients.supabase_client import get_supabase_client
 from db.session import get_db
-from services.institute_service import InstituteService, get_institute_service
-from services.parent_service import ParentService, get_parent_service
+from rate_limiter import limiter
 from routes.requests.join_institute_request import JoinInstituteRequest
 from routes.requests.otp_generate_request import OtpGenerateRequest
 from routes.requests.parent_verify_otp_request import ParentVerifyOtpRequest
 from routes.requests.refresh_token_request import RefreshTokenRequest
 from routes.responses.institute_search_response import InstituteSearchResponse
 from routes.responses.parent_profile_response import ParentProfileResponse, StudentSummary
-from routes.responses.verify_parent_response import VerifyParentResponse, StudentSummaryInToken
+from routes.responses.verify_parent_response import StudentSummaryInToken, VerifyParentResponse
+from services.institute_service import InstituteService, get_institute_service
+from services.parent_service import ParentService, get_parent_service
 
 router = APIRouter(prefix="/parent")
 
@@ -41,9 +42,10 @@ async def _get_current_user_id(
     "/generate_otp",
     summary="Send an OTP to the given Indian mobile number (parent/student-app login)",
 )
-async def send_otp(request: OtpGenerateRequest, supabase: SupabaseClient):
+@limiter.limit("5/minute")
+async def send_otp(request: Request, body: OtpGenerateRequest, supabase: SupabaseClient):
     try:
-        return await supabase.auth.sign_in_with_otp({"phone": f"+91{request.phone}"})
+        return await supabase.auth.sign_in_with_otp({"phone": f"+91{body.phone}"})
     except Exception as e:
         logger.error(e)
         raise HTTPException(
@@ -57,7 +59,9 @@ async def send_otp(request: OtpGenerateRequest, supabase: SupabaseClient):
     summary="Verify OTP and upsert parent record; returns JWT + list of children",
     response_model=VerifyParentResponse,
 )
+@limiter.limit("10/minute")
 async def verify_otp(
+    request: Request,
     verify_request: ParentVerifyOtpRequest,
     parent_service: ParentServiceDep,
     supabase: SupabaseClient,
@@ -214,8 +218,9 @@ async def join_institute(
     if parent.institute_id != institute.id:
         await parent_service.update_parent(db=db, user_id=user_id, updates={"institute_id": institute.id})
 
-    from models.owner_base import OwnerSchema
     from sqlalchemy import select as _sel
+
+    from models.owner_base import OwnerSchema
     owner_res = await db.execute(_sel(OwnerSchema).where(OwnerSchema.id == institute.owner_id))
     owner = owner_res.scalar_one_or_none()
 

@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from loguru import logger
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from models.batch_base import BatchSchema
 from models.class_session_base import ClassSessionSchema
 from models.enrollment_base import EnrollmentSchema
 from models.fee_record_base import FeeRecordSchema
+from rate_limiter import limiter
 from routes.requests.create_institute_request import CreateInstituteRequest
 from routes.requests.otp_generate_request import OtpGenerateRequest
 from routes.requests.owner_verify_otp_request import OwnerVerifyOtpRequest
@@ -52,9 +53,10 @@ async def _get_current_teacher_id(
     "/generate_otp",
     summary="Send an OTP to  ithe given Indian mobile number (owner login)",
 )
-async def send_otp(request: OtpGenerateRequest, supabase: SupabaseClient):
+@limiter.limit("5/minute")
+async def send_otp(request: Request, body: OtpGenerateRequest, supabase: SupabaseClient):
     try:
-        return await supabase.auth.sign_in_with_otp({"phone": f"+91{request.phone}"})
+        return await supabase.auth.sign_in_with_otp({"phone": f"+91{body.phone}"})
     except Exception as e:
         logger.error(e)
         raise HTTPException(
@@ -68,7 +70,9 @@ async def send_otp(request: OtpGenerateRequest, supabase: SupabaseClient):
     summary="Verify OTP and upsert owner record; returns a JWT",
     response_model=VerifyOwnerResponse,
 )
+@limiter.limit("10/minute")
 async def verify_otp(
+    request: Request,
     verify_request: OwnerVerifyOtpRequest,
     owner_service: OwnerServiceDep,
     supabase: SupabaseClient,
