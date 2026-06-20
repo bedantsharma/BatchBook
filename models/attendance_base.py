@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, UniqueConstraint
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Index, Integer, UniqueConstraint
 
 from db.base import Base
 
@@ -29,4 +29,5 @@ class AttendanceSchema(Base):
 
     __table_args__ = (
         UniqueConstraint("session_id", "enrollment_id", name="uq_attendance_session_enrollment"),
+        Index("ix_attendance_enrollment_id", "enrollment_id"),
     )

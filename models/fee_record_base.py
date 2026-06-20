@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -44,4 +45,5 @@ class FeeRecordSchema(Base):
 
     __table_args__ = (
         UniqueConstraint("enrollment_id", "month", name="uq_fee_record_enrollment_month"),
+        Index("ix_fee_record_enrollment_id", "enrollment_id"),
     )

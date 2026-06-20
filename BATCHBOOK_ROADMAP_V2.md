@@ -112,15 +112,52 @@
 
 Run the following test scripts against `make dev` (local Docker):
 
-- [ ] **Owner new-user flow:** Fresh phone number → `/onboarding` → select Owner → OTP → verify OTP → should land at `/owner/setup` (not `/owner/dashboard`). Complete setup → should land at `/owner/dashboard`.
-- [ ] **Owner returning-user flow:** Known owner phone → OTP → should skip setup and go straight to `/owner/dashboard`.
-- [ ] **Student/parent flow:** Parent phone → `/onboarding` → select Student → fill parent details → OTP → should land at `/dashboard/student` with real data (not error screen).
-- [ ] **Role guard test:** Log in as owner → try navigating to `/dashboard/student` by URL → should redirect to `/phone-login`. Log in as parent → try `/owner/dashboard` → should redirect to `/onboarding`.
-- [ ] **Sign out:** Click sign out → localStorage `bb_role` and `bb_student_id` should be cleared → protected routes should redirect.
+- [x] **Owner new-user flow:** Fresh phone number → `/onboarding` → select Owner → OTP → verify OTP → should land at `/owner/setup` (not `/owner/dashboard`). Complete setup → should land at `/owner/dashboard`.
+- [x] **Owner returning-user flow:** Known owner phone → OTP → should skip setup and go straight to `/owner/dashboard`.
+- [x] **Student/parent flow:** Parent phone → `/onboarding` → select Student → fill parent details → OTP → should land at `/dashboard/student` with real data (not error screen).
+- [x] **Role guard test:** Log in as owner → try navigating to `/dashboard/student` by URL → should redirect to `/phone-login`. Log in as parent → try `/owner/dashboard` → should redirect to `/onboarding`.
+- [x] **Sign out:** Click sign out → localStorage `bb_role` and `bb_student_id` should be cleared → protected routes should redirect.
 
 For each flow, write what you saw under "Verified by" in this file.
 
-**Verified by:** _(pending — must be done by Bedant manually)_
+**Verified by:** _(bedant sharma)_
+### Owner new user flow
+
+---
+on the /onboarding page there is no option to get started as a owner there is only an teacher path and a student path 
+
+there is a page that is /phone-login that is for owner onboarding but
+i think that it should be mapped to the onboarding flow itself.
+
+rest of the flow works fine. the setup -> dashboard flow works
+
+
+### Returning owner flow 
+
+---
+
+works as expected just a small thing in the /otp-verification page if i 
+enter a wrong otp once and then resend otp then try to fill that otp i was not able to do that 
+please look into that if you have time 
+
+### Student onboarding flow 
+
+---
+
+works as expected. 
+
+### role guardrails 
+
+---
+
+when login as student i tried to visit the /owner/dashboard endpoint and got redirected to /phone-login screen
+
+### Sign out button
+
+---
+works fine for the student page
+
+as it works for the student page i also expect it to work for the parent page
 
 ---
 
@@ -149,7 +186,7 @@ For each flow, write what you saw under "Verified by" in this file.
 
 ---
 
-## PHASE B — Real Landing Page ⬜ NOT-STARTED
+## PHASE B — Real Landing Page  ✅Done
 
 **Why this comes before deployment:** Two reasons:
 1. WATI (WhatsApp Business API) requires a business website URL during Meta verification. The current placeholder card at `/` doesn't count — Meta looks for a real page with product description, privacy policy, and contact info.

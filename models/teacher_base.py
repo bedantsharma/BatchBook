@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import UUID, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import UUID, Column, DateTime, ForeignKey, Index, Integer, String
 
 from db.base import Base
 
@@ -13,3 +13,5 @@ class TeacherSchema(Base):
     phone_number = Column(String, unique=True, nullable=False)
     user_id = Column(UUID(as_uuid=True), unique=True, nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+    __table_args__ = (Index("ix_teacher_institute_id", "institute_id"),)

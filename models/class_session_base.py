@@ -1,6 +1,6 @@
 from datetime import date, datetime, time
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Time
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Index, Integer, String, Time
 
 from db.base import Base
 
@@ -21,3 +21,5 @@ class ClassSessionSchema(Base):
     end_time = Column(Time, nullable=False)
     topic = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+    __table_args__ = (Index("ix_class_session_batch_id", "batch_id"),)

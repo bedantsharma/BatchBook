@@ -1,7 +1,7 @@
 import enum
 from datetime import date, datetime, time
 
-from sqlalchemy import Column, Date, DateTime, Enum, ForeignKey, Integer, JSON, String, Time
+from sqlalchemy import Column, Date, DateTime, Enum, ForeignKey, Index, Integer, JSON, String, Time
 
 from db.base import Base
 
@@ -29,3 +29,5 @@ class BatchSchema(Base):
     end_date = Column(Date, nullable=False)
     status = Column(Enum(BatchStatus), nullable=False, default=BatchStatus.ACTIVE)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+    __table_args__ = (Index("ix_batch_institute_id", "institute_id"),)

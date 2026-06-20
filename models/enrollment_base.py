@@ -1,7 +1,16 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    UniqueConstraint,
+)
 from sqlalchemy.sql import expression
 
 from db.base import Base
@@ -38,4 +47,6 @@ class EnrollmentSchema(Base):
 
     __table_args__ = (
         UniqueConstraint("student_id", "batch_id", name="uq_enrollment_student_batch"),
+        Index("ix_enrollment_batch_id", "batch_id"),
+        Index("ix_enrollment_student_id", "student_id"),
     )

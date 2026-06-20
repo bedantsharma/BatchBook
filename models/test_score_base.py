@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Index, Integer, String
 
 from db.base import Base
 
@@ -16,3 +16,5 @@ class ScoreSchema(Base):
     max_marks = Column(Integer, nullable=False)
     obtained_marks = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+    __table_args__ = (Index("ix_test_score_enrollment_id", "enrollment_id"),)

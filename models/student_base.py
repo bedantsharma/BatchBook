@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Index, Integer, String
 
 from db.base import Base
 from DTO.student_model import StudentFeesStatus
@@ -17,3 +17,8 @@ class StudentSchema(Base):
     parent_id = Column(Integer, ForeignKey("Parent.id"), nullable=True)
     institute_id = Column(Integer, ForeignKey("Institute.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+    __table_args__ = (
+        Index("ix_student_institute_id", "institute_id"),
+        Index("ix_student_parent_id", "parent_id"),
+    )
