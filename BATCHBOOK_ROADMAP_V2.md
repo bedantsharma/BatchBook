@@ -251,30 +251,33 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
 
 ---
 
-### Task C.2 — Set up Render.com for the backend
+### Task C.2 — Set up Render.com for the backend 🟡 PARTIAL
 
-- [ ] Sign up at render.com
-- [ ] "New Web Service" → connect `github.com/bedantsharma/BatchBook`
-- [ ] Environment: Docker
-- [ ] Dockerfile path: `./Dockerfile`
-- [ ] Docker build target: `prod`
-- [ ] Set all env vars in Render dashboard:
+- [x] Sign up at render.com
+- [x] "New Web Service" → connect `github.com/bedantsharma/BatchBook`
+- [x] Environment: Docker
+- [x] Dockerfile path: `./Dockerfile`
+- [x] Docker build target: `prod`
+- [x] Set all env vars in Render dashboard:
   - `DATABASE_URL`
   - `SUPABASE_URL`
   - `SUPABASE_KEY`
   - `RAZORPAY_KEY_ID`
   - `RAZORPAY_KEY_SECRET`
   - `PROJECT_NAME=BatchBook`
-- [ ] Set custom domain: `api.yourdomain.com` → Render provides a certificate automatically
-- [ ] First deploy: verify `https://api.yourdomain.com/docs` loads
+  - `PORT=8000`
+- [x] First deploy: service is live on the default `*.onrender.com` URL
+- [ ] Verify `https://<service>.onrender.com/docs` loads (Swagger UI renders, no 500s)
+- [ ] Run `uv run alembic upgrade head` against the prod `DATABASE_URL` — Render never ran the `alembic-check` guard, so this must be done manually at least once
+- [ ] Set custom domain: `api.batchbook.in` → add the CNAME target Render provides to Namecheap Advanced DNS
 
-**Verified by:** _(pending)_
+**Verified by:** _(live on Render, custom domain + DB migration check still pending)_
 
 ---
 
 ### Task C.3 — Configure frontend for production
 
-- [ ] In Vercel project settings, add env var: `VITE_API_URL=https://api.yourdomain.com`
+- [ ] In Vercel project settings, add env var: `VITE_API_BASE_URL=https://api.batchbook.in` (the code reads `VITE_API_BASE_URL`, not `VITE_API_URL` — verify the exact name in `src/services/api.js`)
 - [ ] Add custom domain in Vercel: `yourdomain.com` (naked domain) + `www.yourdomain.com`
 - [ ] Update CORS in `app.py` — add your production domain to `allow_origins`
   ```python
