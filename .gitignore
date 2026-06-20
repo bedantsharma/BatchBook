@@ -20,3 +20,4 @@ wheels/
 node_modules/
 test-results/
 playwright-report/
+BATCHBOOK_ROADMAP.md
