@@ -18,8 +18,7 @@
 - E2E Playwright specs exist (5 files) but never run against a live environment
 
 ### What is broken in production (would fail today if deployed)
-- **nginx.conf only proxies `/student/*` and `/owner/*`** — every call to `/batch/*`, `/fee/*`, `/attendance/*`, `/enrollment/*`, `/scores/*`, `/parent/*` would 404. The entire owner dashboard breaks in prod.
-- **No domain, no SSL, no hosting** — Docker prod stack exists but nowhere to run it
+- **nginx.conf only proxies `/student/*` and `/owner/*`** — fixed in Task A.1 (not yet re-verified live, since prod now runs on Render/Vercel rather than the Docker nginx stack)
 
 ### What is incomplete (code partially written or missing)
 - `OwnerDashboard` header stats ("X students enrolled | ₹Y collected | Z% avg attendance") — backend `/owner/stats` exists but frontend not wired
@@ -27,10 +26,10 @@
 - Student fee payment button (Razorpay link) never surfaced in student dashboard
 - Attendance streak hardcoded to 0 (no backend endpoint)
 - Notification count always returns 0 (no backend endpoint)
-- Landing page is a placeholder card — not a real marketing page
+- No working `@batchbook.in` email address — domain has no MX records, so any mail sent to it bounces. Landing page footer currently links `manurishi1103@gmail.com` instead, which works fine for now. Not blocking anything; revisit if a branded inbox (e.g. via Zoho Mail free tier) becomes worth setting up.
 
 ### What is blocked on external credentials
-- WATI tasks (3.4, 4.2) — pending Meta/WhatsApp Business verification, which itself is blocked because WATI needs a business website URL
+- WATI tasks (3.4, 4.2) — Meta/WhatsApp Business verification **applied for** (using `batchbook.in`, live since Task C.3). Awaiting Meta's approval before WATI API credentials are issued — implement Phase D the moment they arrive.
 
 ---
 
@@ -38,18 +37,16 @@
 
 | Gap | Severity | Blocks |
 |-----|----------|--------|
-| nginx only proxies 2 of 9 route prefixes | 🔴 CRITICAL | All of owner dashboard in prod |
-| No hosting/domain/SSL | 🔴 CRITICAL | Deployment |
-| WATI needs a business website URL for Meta | 🔴 CRITICAL | WhatsApp notifications |
+| Meta/WhatsApp Business verification pending approval | 🟡 HIGH | WATI credentials (Phase D) |
+| No CI/CD pipeline | 🟡 HIGH | Safe deployments |
 | Owner header stats not wired | 🟡 HIGH | UX completeness |
 | Student Batches/Schedule/Fees tabs greyed out | 🟡 HIGH | Student app completeness |
 | Student Razorpay payment link not surfaced | 🟡 HIGH | Core value prop for parents |
-| Phase 0 flows never manually tested | 🟡 HIGH | Confidence before launch |
-| No CI/CD pipeline | 🟡 HIGH | Safe deployments |
-| Landing page is placeholder | 🟠 MEDIUM | WATI verification + user acquisition |
+| Full prod stack never smoke-tested end-to-end on `batchbook.in` | 🟡 HIGH | Confidence before real users |
 | Attendance streak always 0 | 🟠 MEDIUM | Student UX |
 | Multi-child parent has no child selector | 🟠 MEDIUM | Parents with >1 child |
 | E2E tests never run in CI | 🟠 MEDIUM | Regression safety |
+| No `@batchbook.in` email (no MX records) | 🟢 LOW | Branded contact email only |
 | No PDF fee receipt | 🟢 LOW | Nice-to-have |
 
 ---
@@ -60,8 +57,8 @@
 |-------|------|--------|
 | **A** | Fix ship-blockers — nginx, stats, student tabs | 🟡 PARTIAL — A.1 ✅ A.2 ✅ A.4 ✅ A.5 ✅ · A.3 pending manual test |
 | **B** | Landing page (real marketing page + WATI website URL) | ✅ DONE — deployed at batchbookui.vercel.app |
-| **C** | Deployment — hosting, domain, SSL, CI/CD | ⬜ NOT-STARTED |
-| **D** | WATI notifications (fee reminders, absence alerts) | 🚫 BLOCKED (credentials) |
+| **C** | Deployment — hosting, domain, SSL, CI/CD | 🟡 PARTIAL — C.1 ✅ C.2 ✅ C.3 ✅ · C.4 (CI/CD) and C.5 (smoke test) remaining |
+| **D** | WATI notifications (fee reminders, absence alerts) | 🚫 BLOCKED — Meta Business verification applied for, awaiting approval |
 | **E** | Polish — multi-child, streak, receipts, E2E CI | ⬜ NOT-STARTED |
 
 **Sequencing rationale:**
@@ -251,7 +248,7 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
 
 ---
 
-### Task C.2 — Set up Render.com for the backend 🟡 PARTIAL
+### Task C.2 — Set up Render.com for the backend ✅ DONE
 
 - [x] Sign up at render.com
 - [x] "New Web Service" → connect `github.com/bedantsharma/BatchBook`
@@ -267,27 +264,22 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
   - `PROJECT_NAME=BatchBook`
   - `PORT=8000`
 - [x] First deploy: service is live on the default `*.onrender.com` URL
-- [ ] Verify `https://<service>.onrender.com/docs` loads (Swagger UI renders, no 500s)
-- [ ] Run `uv run alembic upgrade head` against the prod `DATABASE_URL` — Render never ran the `alembic-check` guard, so this must be done manually at least once
-- [ ] Set custom domain: `api.batchbook.in` → add the CNAME target Render provides to Namecheap Advanced DNS
+- [x] Verify `https://batchbook-g9c0.onrender.com/docs` loads — confirmed, Swagger UI renders ("Batch Book - Swagger UI")
+- [x] Migrations — same Supabase DB as dev, already at head; no manual `alembic upgrade head` needed
+- [x] Custom domain `api.batchbook.in` added in Render, DNS CNAME added in Namecheap, domain verified (had to clear Namecheap's default parking CNAME/URL-redirect records and a conflicting CAA record first — Let's Encrypt cert issuance needs a clean CAA or one that allows `letsencrypt.org`)
 
-**Verified by:** _(live on Render, custom domain + DB migration check still pending)_
+**Verified by:** _(bedant sharma — live at api.batchbook.in, /docs confirmed loading)_
 
 ---
 
-### Task C.3 — Configure frontend for production
+### Task C.3 — Configure frontend for production ✅ DONE
 
-- [ ] In Vercel project settings, add env var: `VITE_API_BASE_URL=https://api.batchbook.in` (the code reads `VITE_API_BASE_URL`, not `VITE_API_URL` — verify the exact name in `src/services/api.js`)
-- [ ] Add custom domain in Vercel: `yourdomain.com` (naked domain) + `www.yourdomain.com`
-- [ ] Update CORS in `app.py` — add your production domain to `allow_origins`
-  ```python
-  # Add to CORS origins list:
-  "https://yourdomain.com",
-  "https://www.yourdomain.com",
-  ```
-- [ ] Push the change → Render auto-redeploys
+- [x] Add custom domain in Vercel: `batchbook.in` (naked domain) + `www.batchbook.in`
+- [x] Update CORS in `app.py` — added `https://batchbookui.vercel.app`, `https://batchbook.in`, `https://www.batchbook.in` to `allow_origins` (done before first Render deploy, to avoid a redeploy just for CORS)
+- [x] In Vercel project settings, add env var: `VITE_API_BASE_URL=https://api.batchbook.in`
+- [x] Fixed a bug along the way: `batchbookui/.env.production` (committed to git) had a leftover placeholder `VITE_API_BASE_URL=https://your-backend-url.com`, and the Vercel dashboard var had initially been misnamed `VITE_API_URL` — neither matched what `src/services/api.js` actually reads (`VITE_API_BASE_URL`), so OTP requests were silently calling the wrong host. Fixed in both places (PR [#25](https://github.com/bedantsharma/batchbookui/pull/25), merged) and redeployed.
 
-**Verified by:** _(pending)_
+**Verified by:** _(bedant sharma — confirmed OTP requests hit api.batchbook.in after the fix)_
 
 ---
 
@@ -329,9 +321,9 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
 
 ---
 
-## PHASE D — WATI Notifications 🚫 BLOCKED (credentials)
+## PHASE D — WATI Notifications 🚫 BLOCKED (Meta verification pending)
 
-> Implement these the moment your WATI account is approved and you have the API endpoint + token. The Meta verification will succeed once you submit the URL from Task B.2.
+> Meta/WhatsApp Business verification has been **submitted** using `batchbook.in` as the business website. Implement these the moment your WATI account is approved and you have the API endpoint + token.
 
 ---
 
@@ -417,23 +409,21 @@ Do these after real users start using the app and give feedback. Don't do them b
 
 | Action | Unblocks |
 |--------|---------|
-| Manually test Phase 0 flows (Task A.3) | Confidence before deployment |
-| Buy a domain (Task C.1) | All of Phase C |
-| Complete Render.com setup (Task C.2) | Backend in production |
-| Submit WATI business website URL (from B.2 Vercel deploy) | WATI Meta verification |
+| Fix the 3 bugs found during A.3 manual testing (owner path missing from `/onboarding`, OTP resend bug, parent sign-out) | Confidence before real users |
+| Set up CI/CD (Task C.4) | Safe deploys going forward |
+| Full smoke test on `https://batchbook.in` (Task C.5) | Confidence before real users |
+| Wait for Meta Business verification approval | WATI credentials (Phase D) |
 
 ---
 
-## Deployment Architecture (target)
+## Deployment Architecture (live)
 
 ```
-yourdomain.com (Vercel — CDN, auto-HTTPS)
+batchbook.in (Vercel — CDN, auto-HTTPS)
        │
-       ├── / through /owner/* → React SPA (Vercel edge)
-       │
-       └── /batch/*, /fee/*, /attendance/*, ...
-             ↓ (Vercel rewrites or direct browser calls)
-    api.yourdomain.com (Render.com — always-on, $7/mo)
+       └── React SPA, calls api.batchbook.in directly from the browser
+             │
+    api.batchbook.in (Render.com — always-on, $7/mo)
              │
      FastAPI + uvicorn (2 workers)
              │
@@ -442,7 +432,7 @@ yourdomain.com (Vercel — CDN, auto-HTTPS)
  (OTP + JWT)     (all data)
 ```
 
-> **Note on Vercel + backend calls:** The current `batchbookui/nginx.conf` is only used in the Docker prod stack. On Vercel, API calls go directly from the browser to `api.yourdomain.com` — nginx doesn't proxy them. CORS in `app.py` covers this.
+> **Note on Vercel + backend calls:** `batchbookui/nginx.conf` is only used in the local Docker prod stack (`make prod`), not on Vercel. On Vercel, API calls go directly from the browser to `api.batchbook.in` — CORS in `app.py` covers this.
 
 ---
 
