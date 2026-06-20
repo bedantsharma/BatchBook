@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase import AsyncClient
@@ -9,12 +9,14 @@ from supabase_auth.errors import AuthApiError
 from clients.supabase_client import get_supabase_client
 from db.session import get_db
 from DTO.student_model import Student
-from services.student_service import StudentService, get_student_service
+from rate_limiter import limiter
 from services.parent_service import ParentService, get_parent_service
+from services.student_service import StudentService, get_student_service
+
 from .requests.otp_generate_request import OtpGenerateRequest
 from .requests.otp_verify_request import OtpVerifyRequest
 from .requests.refresh_token_request import RefreshTokenRequest
-from .responses.verify_parent_response import VerifyParentResponse, StudentSummaryInToken
+from .responses.verify_parent_response import StudentSummaryInToken, VerifyParentResponse
 
 router = APIRouter(prefix="/student")
 
@@ -51,9 +53,10 @@ async def create_student(
         "Use POST /parent/generate_otp for the canonical endpoint."
     ),
 )
-async def send_otp(request: OtpGenerateRequest, supabase: SupabaseClient):
+@limiter.limit("5/minute")
+async def send_otp(request: Request, body: OtpGenerateRequest, supabase: SupabaseClient):
     try:
-        return await supabase.auth.sign_in_with_otp({"phone": f"+91{request.phone}"})
+        return await supabase.auth.sign_in_with_otp({"phone": f"+91{body.phone}"})
     except Exception as e:
         logger.error(e)
         raise HTTPException(
@@ -72,7 +75,9 @@ async def send_otp(request: OtpGenerateRequest, supabase: SupabaseClient):
     ),
     response_model=VerifyParentResponse,
 )
+@limiter.limit("10/minute")
 async def verify_otp(
+    request: Request,
     verify_request: OtpVerifyRequest,
     parent_service: ParentServiceDep,
     supabase: SupabaseClient,
