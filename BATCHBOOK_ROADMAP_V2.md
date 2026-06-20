@@ -243,11 +243,11 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
 
 ---
 
-### Task C.1 — Buy a domain
+### Task C.1 — Buy a domain ✅ DONE
 
-- [ ] Buy a `.com` or `.in` domain — suggestions: `batchbook.in`, `batchbook.app`, `trybatchbook.com`
-- [ ] Recommended registrar: Namecheap or Google Domains
-- [ ] Note the domain here once purchased: **Domain: ___________**
+- [x] Buy a `.com` or `.in` domain — suggestions: `batchbook.in`, `batchbook.app`, `trybatchbook.com`
+- [x] Recommended registrar: Namecheap or Google Domains
+- [x] Note the domain here once purchased: **Domain: batchbook.in (Namecheap)**
 
 ---
 

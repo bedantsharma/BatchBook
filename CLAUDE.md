@@ -288,6 +288,27 @@ make help         # print all targets
 - **Backend:** host `BatchBook/` is volume-mounted to `/app` inside the container; uvicorn `--reload` watches for changes. `.venv` is protected by an anonymous volume so the host mount never overwrites the container's virtualenv.
 - **Frontend:** host `batchbookui/` is volume-mounted; Vite HMR detects changes and pushes updates to the browser. `node_modules/` is protected by an anonymous volume for the same reason.
 
+---
+
+## Production Deployment (Render.com)
+
+Backend deploys to **Render.com** as a single Docker web service. Frontend stays on **Vercel** (already deployed at `batchbookui.vercel.app`, custom domain `batchbook.in` pending DNS). Domain: **batchbook.in** (Namecheap).
+
+**Render does not read `docker-compose.prod.yml`** — it builds exactly one Dockerfile per service. Point it at:
+- Dockerfile path: `./Dockerfile` (repo root — backend only)
+- Build context: `.` (repo root)
+- No `--target` flag needed: `prod` is the last stage in the Dockerfile, so a plain build already produces it
+- `.dockerignore` excludes `batchbookui/` from the build context, so the backend image can never accidentally pull in frontend code — there's no risk of Render spinning up both services from this single Dockerfile
+
+**Differences from the local Docker Compose stack — must configure these on Render:**
+
+1. **Port** — Render injects `$PORT` and routes traffic to it. The Dockerfile's prod CMD hardcodes `uvicorn --port 8000`. Set an env var `PORT=8000` in the Render dashboard to match (no Dockerfile change needed).
+2. **Migration guard is skipped** — `alembic-check` (in `docker-compose.prod.yml`) is a separate one-shot compose service; Render never runs it since it only builds the single backend Dockerfile. Migrations must be applied manually: `uv run alembic upgrade head` against the prod `DATABASE_URL`, run before/after each deploy with a schema change (or via Render's Pre-Deploy Command field, if available on the plan).
+3. **`.env` is not read** — Render ignores `env_file: .env` from compose. Set every var individually in the Render dashboard: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `PROJECT_NAME`, `PORT`.
+4. **CORS** — production frontend origins (`https://batchbookui.vercel.app`, `https://batchbook.in`, `https://www.batchbook.in`) must already be in `allow_origins` in `app.py` *before* first deploy, to avoid a redeploy just for a CORS fix.
+
+**Custom domain:** add `api.batchbook.in` in Render → Settings → Custom Domain. Render gives you a CNAME target — add that as a CNAME record for the `api` subdomain in Namecheap Advanced DNS. Same pattern for `batchbook.in` / `www.batchbook.in` pointed at Vercel (Vercel's domain settings page shows the exact A/CNAME records to add).
+
 ## Running the Backend (without Docker)
 
 ```bash
