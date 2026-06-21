@@ -1,6 +1,6 @@
 # BatchBook — Roadmap v2 (June 2026 → Deployment)
 
-> **How to use this file:** Read "Current Reality" first. Then pick the first unchecked item under the current phase. Phases A and B must complete before Phase C (deployment). Phase D unlocks only after WATI credentials arrive.
+> **How to use this file:** Read "Current Reality" first. Then pick the first unchecked item under the current phase. Phases A and B must complete before Phase C (deployment). Phase D is unblocked — Meta/WhatsApp Business verification approved 2026-06-21.
 
 ---
 
@@ -29,7 +29,19 @@
 - No working `@batchbook.in` email address — domain has no MX records, so any mail sent to it bounces. Landing page footer currently links `manurishi1103@gmail.com` instead, which works fine for now. Not blocking anything; revisit if a branded inbox (e.g. via Zoho Mail free tier) becomes worth setting up.
 
 ### What is blocked on external credentials
-- WATI tasks (3.4, 4.2) — Meta/WhatsApp Business verification **applied for** (using `batchbook.in`, live since Task C.3). Awaiting Meta's approval before WATI API credentials are issued — implement Phase D the moment they arrive.
+- Nothing — Meta/WhatsApp Business verification (`batchbook.in`) **approved 2026-06-21**. WhatsApp Business Account is live and can send messages. Phase D ready to implement.
+
+### Decision: integrate Meta Cloud API directly, skip WATI (decided 2026-06-21)
+
+WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/month) around the same underlying Meta WhatsApp Cloud API. Since `notification_service.py` is currently 100% stub (no real client exists yet), there's nothing to migrate — this is a clean choice of integration target before Phase D is built. All 4 message types BatchBook needs (enrollment invite, fee reminder, fee receipt, absence alert) are business-initiated **template** messages, which the Cloud API supports natively with no BSP needed:
+
+- **Cost:** ₹0/month platform fee — pay Meta only per message sent (utility-category templates are the cheapest tier). No ₹2,600/month WATI bill.
+- **Integration shape is unchanged:** still one async `httpx` client with a `send_template_message(phone, template_name, params)` method, same as the WATI plan — just pointed at `https://graph.facebook.com/v{version}/{phone_number_id}/messages` instead of WATI's endpoint.
+- **One-time setup required (do before Task D.1):**
+  - Generate a **permanent System User access token** in Meta Business Suite → Business Settings → System Users (scopes: `whatsapp_business_messaging`, `whatsapp_business_management`, expiry: Never) — the default token from the API testing page expires in ~1-2h and will silently break notifications in prod if used instead.
+  - Note down `phone_number_id` and `WABA ID` from WhatsApp Manager.
+  - New WABAs are capped at 250 unique recipients/24h (Tier 1) until usage/quality earns an upgrade — not a concern at current scale.
+- Templates (`fee_reminder`, `fee_receipt`, `absence_alert`, `enrollment_invite`) are created in WhatsApp Manager under category **Utility**, not WATI's dashboard. `fee_reminder` should use a URL button pointing at the Razorpay payment link rather than embedding the raw link in text.
 
 ---
 
@@ -39,7 +51,6 @@
 |-----|----------|--------|
 | All institutes' fee payments settle into the platform's own Razorpay account, not the owner's — single global `razorpay.Client` in `clients/razorpay_client.py` | 🔴 CRITICAL | Onboarding any real second paying owner; regulatory exposure (RBI Payment Aggregator rules) |
 | No Razorpay webhook handler — payment status is 100% manual via `PATCH /fee/record/{id}/pay` | 🔴 CRITICAL | Reliable fee status, auto `fee_receipt` WATI send (Task D.2) |
-| Meta/WhatsApp Business verification pending approval | 🟡 HIGH | WATI credentials (Phase D) |
 | No CI/CD pipeline | 🟡 HIGH | Safe deployments |
 | Owner header stats not wired | 🟡 HIGH | UX completeness |
 | Student Batches/Schedule/Fees tabs greyed out | 🟡 HIGH | Student app completeness |
@@ -60,7 +71,7 @@
 | **A** | Fix ship-blockers — nginx, stats, student tabs | 🟡 PARTIAL — A.1 ✅ A.2 ✅ A.4 ✅ A.5 ✅ · A.3 pending manual test |
 | **B** | Landing page (real marketing page + WATI website URL) | ✅ DONE — deployed at batchbookui.vercel.app |
 | **C** | Deployment — hosting, domain, SSL, CI/CD | 🟡 PARTIAL — C.1 ✅ C.2 ✅ C.3 ✅ · C.4 (CI/CD) and C.5 (smoke test) remaining |
-| **D** | WATI notifications (fee reminders, absence alerts) | 🚫 BLOCKED — Meta Business verification applied for, awaiting approval |
+| **D** | WhatsApp notifications via Meta Cloud API direct (fee reminders, absence alerts) | ⬜ NOT-STARTED — unblocked, ready to implement |
 | **F** | Multi-tenant payments — Razorpay Route + Linked Accounts (hosted onboarding) + webhooks | 🚫 BLOCKED — needs Razorpay Route eligibility confirmed (Task F.1) |
 | **E** | Polish — multi-child, streak, receipts, E2E CI | ⬜ NOT-STARTED |
 
@@ -68,7 +79,7 @@
 - Phase A first: fix what's broken before putting it in front of anyone
 - Phase B second: landing page serves double duty — WATI needs a URL, owners need a place to find you
 - Phase C third: now you have something worth deploying
-- Phase D whenever: WATI credentials may arrive any time; implement immediately when they do
+- Phase D next up: Meta verification is approved, no external dependency left — implement whenever convenient
 - **Phase F before onboarding any second real paying owner** — today all fee money settles into your own Razorpay account regardless of institute; this is higher priority than Phase E even though it's lettered after it
 - Phase E ongoing: polish after real users give feedback
 
@@ -325,25 +336,33 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
 
 ---
 
-## PHASE D — WATI Notifications 🚫 BLOCKED (Meta verification pending)
+## PHASE D — WhatsApp Notifications via Meta Cloud API 🟢 READY (verification approved 2026-06-21)
 
-> Meta/WhatsApp Business verification has been **submitted** using `batchbook.in` as the business website. Implement these the moment your WATI account is approved and you have the API endpoint + token.
+> Going direct to Meta's Cloud API instead of WATI — see "Decision" note in Current Reality above. No BSP, no monthly fee, same integration shape originally planned for WATI.
 
 ---
 
-### Task D.1 — WATI client + notification service
+### Task D.0 — One-time Meta-side setup (do first, no code)
 
-- [ ] Add to `.env`: `WATI_API_ENDPOINT=https://live-mt-server.wati.io/XXXXX` and `WATI_API_TOKEN=xxxxxxxx`
-- [ ] Add to `config.py` Settings class: `wati_api_endpoint: str` and `wati_api_token: str`
-- [ ] Create `BatchBook/clients/wati_client.py` — async HTTP client using `httpx`; one method `send_template_message(phone, template_name, params)`
-- [ ] Create `BatchBook/services/notification_service.py` — wraps WATI client; three functions: `send_fee_reminder()`, `send_fee_receipt()`, `send_absence_alert()`
+- [ ] In Meta Business Suite → Business Settings → System Users: create/use a System User, generate a **permanent access token** (scopes `whatsapp_business_messaging`, `whatsapp_business_management`, expiry: Never) — the default testing-page token expires in ~1-2h and will break prod notifications silently if used by mistake
+- [ ] In WhatsApp Manager: note the `phone_number_id` and `WABA ID` for the verified number
+- [ ] Confirm current messaging tier (new WABAs start at 250 unique recipients/24h) — fine at current scale, just be aware before any bulk "remind-all" send
+
+---
+
+### Task D.1 — WhatsApp client + notification service
+
+- [ ] Add to `.env`: `META_WHATSAPP_TOKEN=xxxxxxxx`, `META_WHATSAPP_PHONE_NUMBER_ID=xxxxxxxx`
+- [ ] Add to `config.py` Settings class: `meta_whatsapp_token: str` and `meta_whatsapp_phone_number_id: str` (replaces the unused `wati_api_endpoint` / `wati_api_token` fields)
+- [ ] Create `BatchBook/clients/whatsapp_client.py` — async HTTP client using `httpx`; one method `send_template_message(phone, template_name, params, language="en")` that POSTs to `https://graph.facebook.com/v21.0/{phone_number_id}/messages`
+- [ ] Update `BatchBook/services/notification_service.py` — replace the WATI-stub log lines with real calls into `whatsapp_client`; keep the same four function signatures (`send_enrollment_invite`, `send_fee_reminder`, `send_fee_receipt`, `send_absence_alert`)
 
 ---
 
 ### Task D.2 — Fee reminder and receipt (Tasks 3.4)
 
-**WATI templates to create** (create in WATI dashboard → wait 24–48h for WhatsApp approval):
-- `fee_reminder`: "Hi {{1}}, your fee of ₹{{2}} for {{3}} is due on {{4}}. Pay here: {{5}}"
+**Templates to create in WhatsApp Manager** (category: Utility → wait for approval, usually minutes–24h):
+- `fee_reminder`: "Hi {{1}}, your fee of ₹{{2}} for {{3}} is due on {{4}}." + URL button → Razorpay payment link (pass the link as the button's dynamic URL param, don't embed it in body text)
 - `fee_receipt`: "Hi {{1}}, payment of ₹{{2}} received for {{3}} on {{4}}. Thank you!"
 
 - [ ] Add to `fee_route.py`: `POST /fee/remind/{record_id}` and `POST /fee/remind-all`
@@ -354,12 +373,12 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
 
 ### Task D.3 — Absence alert (Task 4.2)
 
-**WATI template to create:**
+**Template to create in WhatsApp Manager** (category: Utility):
 - `absence_alert`: "Hi, {{1}} was absent from {{2}} today ({{3}}). Please contact us if this is unexpected."
 
 - [ ] Add `send_absence_alert(enrollment_id, date)` to `notification_service.py`
 - [ ] In `attendance_service.py` `bulk_mark()`: after writing ABSENT rows, fire `send_absence_alert` as a background task (use FastAPI `BackgroundTasks`) for each newly-absent enrollment
-- [ ] Don't block the HTTP response on WATI — use `BackgroundTasks` so the attendance mark is instant
+- [ ] Don't block the HTTP response on the WhatsApp call — use `BackgroundTasks` so the attendance mark is instant
 
 ---
 

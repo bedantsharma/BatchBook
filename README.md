@@ -98,7 +98,7 @@ npx playwright test
 
 ## Deployment
 
-- **Frontend:** Vercel, auto-deploys from the `batchbookui` repo on push. Live at `batchbookui.vercel.app`.
+- **Frontend:** Vercel, auto-deploys from the `batchbookui` repo on push. Live at `batchbookui.vercel.app`. the design system of the project lives in batchbookui/batchbook-design-system
 - **Backend:** Render.com, Docker web service built from the root `Dockerfile` (`prod` stage).
 - **Domain:** `batchbook.in` (Namecheap) — `api.batchbook.in` → Render, `batchbook.in`/`www` → Vercel.
 - **Database:** Supabase Postgres (no separate DB hosting cost).

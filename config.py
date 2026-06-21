@@ -12,8 +12,8 @@ class Settings(BaseSettings):
     supabase_key: str
     razorpay_key_id: str | None = None
     razorpay_key_secret: str | None = None
-    wati_api_endpoint: str | None = None
-    wati_api_token: str | None = None
+    meta_whatsapp_token: str | None = None
+    meta_whatsapp_phone_number_id: str | None = None
     rate_limit_enabled: bool = True
 
 
