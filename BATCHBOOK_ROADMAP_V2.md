@@ -70,7 +70,7 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 |-------|------|--------|
 | **A** | Fix ship-blockers — nginx, stats, student tabs | 🟡 PARTIAL — A.1 ✅ A.2 ✅ A.4 ✅ A.5 ✅ · A.3 pending manual test |
 | **B** | Landing page (real marketing page + WATI website URL) | ✅ DONE — deployed at batchbookui.vercel.app |
-| **C** | Deployment — hosting, domain, SSL, CI/CD | 🟡 PARTIAL — C.1 ✅ C.2 ✅ C.3 ✅ · C.4 (CI/CD) and C.5 (smoke test) remaining |
+| **C** | Deployment — hosting, domain, SSL, CI/CD | 🟡 PARTIAL — C.1 ✅ C.2 ✅ C.3 ✅ C.4 ✅ · C.5 (smoke test) remaining |
 | **D** | WhatsApp notifications via Meta Cloud API direct (fee reminders, absence alerts) | ⬜ NOT-STARTED — unblocked, ready to implement |
 | **F** | Multi-tenant payments — owner brings their own Razorpay account (BYO keys) + per-tenant webhooks | 🟢 READY — decision finalized 2026-06-23, not yet built |
 | **E** | Polish — multi-child, streak, receipts, E2E CI | ⬜ NOT-STARTED |
@@ -240,7 +240,7 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
 
 ---
 
-## PHASE C — Production Deployment ⬜ NOT-STARTED
+## PHASE C — Production Deployment 🟡 PARTIAL (C.5 pending)
 
 **Decision to make first:** Where to host the backend?
 
@@ -298,30 +298,15 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
 
 ---
 
-### Task C.4 — Set up CI/CD with GitHub Actions
+### Task C.4 — Set up CI/CD with GitHub Actions ✅ DONE
 
-**Why:** Without CI, a bad push goes straight to prod. With CI, tests run first and the deploy only happens if 247 tests pass.
+**Why:** Without CI, a bad push goes straight to prod. With CI, tests run first and the deploy only happens if tests pass.
 
-- [ ] Create `.github/workflows/deploy-backend.yml`:
-  ```yaml
-  name: Deploy Backend
-  on:
-    push:
-      branches: [master]
-  jobs:
-    test-and-deploy:
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v4
-        - uses: astral-sh/setup-uv@v3
-        - run: uv run pytest -q
-        - name: Deploy to Render
-          run: curl "${{ secrets.RENDER_DEPLOY_HOOK }}"
-  ```
-- [ ] In Render dashboard → your service → "Deploy hooks" → copy the URL → add as `RENDER_DEPLOY_HOOK` GitHub secret
-- [ ] For frontend: Vercel already auto-deploys on every push to `batchbookui` — no extra config needed
+- [x] Created `.github/workflows/deploy-backend.yml` — a `test` job (`uv run pytest -q`) runs on every push *and* every PR into `master`; a `deploy` job runs only on a direct push to `master`, only after `test` passes, and curls the Render deploy hook
+- [x] `RENDER_DEPLOY_HOOK` GitHub secret added (from Render dashboard → service → Settings → Deploy Hook)
+- [x] For frontend: Vercel already auto-deploys on every push to `batchbookui` — no extra config needed
 
-**Verified by:** _(pending — push a dummy commit to master and verify Actions runs tests then triggers Render deploy)_
+**Verified by:** _(bedant sharma — pushed to master 2026-06-23, confirmed via `gh run watch`: `test` passed in 22s, `deploy` job fired the Render hook successfully — run [28049802701](https://github.com/bedantsharma/BatchBook/actions/runs/28049802701))_
 
 ---
 
@@ -539,7 +524,6 @@ Do these after real users start using the app and give feedback. Don't do them b
 | Action | Unblocks |
 |--------|---------|
 | Fix the 3 bugs found during A.3 manual testing (owner path missing from `/onboarding`, OTP resend bug, parent sign-out) | Confidence before real users |
-| Set up CI/CD (Task C.4) | Safe deploys going forward |
 | Full smoke test on `https://batchbook.in` (Task C.5) | Confidence before real users |
 | Wait for Meta Business verification approval | WATI credentials (Phase D) |
 | Build the BYO-Razorpay Settings page + per-institute client (Tasks F.1–F.7) | Safe onboarding of any real second paying owner |
