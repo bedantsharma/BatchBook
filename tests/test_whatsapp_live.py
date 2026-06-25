@@ -1,10 +1,10 @@
 """Live smoke test against the real Meta WhatsApp Cloud API.
 
 Not part of the regular test suite — skipped unless real credentials and a
-target phone number are present. Run explicitly to confirm send access works:
+target phone number are present. Reads META_WHATSAPP_TOKEN and
+META_WHATSAPP_PHONE_NUMBER_ID from .env (same as the app), so no need to pass
+them on the command line. Only the recipient number needs to be set:
 
-    META_WHATSAPP_TOKEN=... \\
-    META_WHATSAPP_PHONE_NUMBER_ID=... \\
     META_WHATSAPP_TEST_RECIPIENT=91XXXXXXXXXX \\
     uv run pytest tests/test_whatsapp_live.py -v -s
 
@@ -17,6 +17,9 @@ once another one gets approved.
 import os
 
 import pytest
+from dotenv import load_dotenv
+
+load_dotenv()
 
 pytestmark = pytest.mark.skipif(
     not (

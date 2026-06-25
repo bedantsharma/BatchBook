@@ -50,22 +50,6 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5175",
-        "https://68cd-2409-40d0-14e9-3bec-b1-11ec-46fe-8ef7.ngrok-free.app",
-        "https://batchbookui.vercel.app",
-        "https://batchbook.in",
-        "https://www.batchbook.in",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 
 @app.middleware("http")
 async def log_and_handle_exceptions(request: Request, call_next):
@@ -90,6 +74,26 @@ async def log_and_handle_exceptions(request: Request, call_next):
         )
         logger.info(f"{request.method} {request.url.path} → 500 ({elapsed:.3f}s)")
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
+# CORSMiddleware must be added last so it becomes the outermost layer.
+# If it were inner (e.g. under log_and_handle_exceptions), any bare JSONResponse
+# returned by that handler on exception would skip CORS headers entirely and the
+# browser would report a spurious "CORS error" instead of the real 500.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "https://batchbookui.vercel.app",
+        "https://batchbook.in",
+        "https://www.batchbook.in",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 app.include_router(router=student_router)
