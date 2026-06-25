@@ -147,7 +147,7 @@ async def invite_student(
         logger.error(e)
         raise HTTPException(status_code=500, detail="Failed to invite student — check logs")
 
-    base_url = "https://batchbookui.vercel.app"  # TODO: replace with real domain after Task C.1
+    base_url = "https://batchbook.in"
     join_url = f"{base_url}/join/{join_code}"
     await send_enrollment_invite(
         parent_phone=request.parent_phone,

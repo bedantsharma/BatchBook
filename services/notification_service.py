@@ -63,6 +63,11 @@ async def send_fee_reminder(
     """Template fee_reminder:
     'Hi {{1}}, your fee of ₹{{2}} for {{3}} is due on {{4}}.
      Pay here: {{5}} Thank you Batchbook Ai'
+
+    TODO: switch to a URL button CTA once Razorpay short_url format is confirmed
+    consistent (base URL would be https://rzp.io/l/ with the unique suffix as the
+    dynamic parameter). A button is more prominent and always tappable on Android.
+    Requires recreating the template in WhatsApp Manager with a button component.
     """
     link_text = payment_link or "Contact your institute"
     amount_str = f"{int(amount):,}" if amount == int(amount) else f"{float(amount):.2f}"

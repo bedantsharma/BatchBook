@@ -71,7 +71,7 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 | **A** | Fix ship-blockers — nginx, stats, student tabs | 🟡 PARTIAL — A.1 ✅ A.2 ✅ A.4 ✅ A.5 ✅ · A.3 pending manual test |
 | **B** | Landing page (real marketing page + WATI website URL) | ✅ DONE — deployed at batchbookui.vercel.app |
 | **C** | Deployment — hosting, domain, SSL, CI/CD | 🟡 PARTIAL — C.1 ✅ C.2 ✅ C.3 ✅ C.4 ✅ · C.5 (smoke test) remaining |
-| **D** | WhatsApp notifications via Meta Cloud API direct (fee reminders, absence alerts) | ⬜ NOT-STARTED — unblocked, ready to implement |
+| **D** | WhatsApp notifications via Meta Cloud API direct (fee reminders, absence alerts) | 🟡 PARTIAL — D.0 ✅ D.1 ✅ D.2 ✅ D.3 ✅ · FeesPage "Remind" button (frontend) pending |
 | **F** | Multi-tenant payments — owner brings their own Razorpay account (BYO keys) + per-tenant webhooks | 🟢 READY — decision finalized 2026-06-23, not yet built |
 | **E** | Polish — multi-child, streak, receipts, E2E CI | ⬜ NOT-STARTED |
 
@@ -329,18 +329,18 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
 
 ### Task D.0 — One-time Meta-side setup (do first, no code)
 
-- [ ] In Meta Business Suite → Business Settings → System Users: create/use a System User, generate a **permanent access token** (scopes `whatsapp_business_messaging`, `whatsapp_business_management`, expiry: Never) — the default testing-page token expires in ~1-2h and will break prod notifications silently if used by mistake
-- [ ] In WhatsApp Manager: note the `phone_number_id` and `WABA ID` for the verified number
-- [ ] Confirm current messaging tier (new WABAs start at 250 unique recipients/24h) — fine at current scale, just be aware before any bulk "remind-all" send
+- [x] In Meta Business Suite → Business Settings → System Users: create/use a System User, generate a **permanent access token** (scopes `whatsapp_business_messaging`, `whatsapp_business_management`, expiry: Never) — the default testing-page token expires in ~1-2h and will break prod notifications silently if used by mistake
+- [x] In WhatsApp Manager: note the `phone_number_id` and `WABA ID` for the verified number
+- [x] Confirm current messaging tier (new WABAs start at 250 unique recipients/24h) — fine at current scale, just be aware before any bulk "remind-all" send
 
 ---
 
 ### Task D.1 — WhatsApp client + notification service
 
-- [ ] Add to `.env`: `META_WHATSAPP_TOKEN=xxxxxxxx`, `META_WHATSAPP_PHONE_NUMBER_ID=xxxxxxxx`
-- [ ] Add to `config.py` Settings class: `meta_whatsapp_token: str` and `meta_whatsapp_phone_number_id: str` (replaces the unused `wati_api_endpoint` / `wati_api_token` fields)
-- [ ] Create `BatchBook/clients/whatsapp_client.py` — async HTTP client using `httpx`; one method `send_template_message(phone, template_name, params, language="en")` that POSTs to `https://graph.facebook.com/v21.0/{phone_number_id}/messages`
-- [ ] Update `BatchBook/services/notification_service.py` — replace the WATI-stub log lines with real calls into `whatsapp_client`; keep the same four function signatures (`send_enrollment_invite`, `send_fee_reminder`, `send_fee_receipt`, `send_absence_alert`)
+- [x] Add to `.env`: `META_WHATSAPP_TOKEN=xxxxxxxx`, `META_WHATSAPP_PHONE_NUMBER_ID=xxxxxxxx`
+- [x] Add to `config.py` Settings class: `meta_whatsapp_token: str` and `meta_whatsapp_phone_number_id: str` (replaces the unused `wati_api_endpoint` / `wati_api_token` fields)
+- [x] Create `BatchBook/clients/whatsapp_client.py` — async HTTP client using `httpx`; one method `send_template_message(phone, template_name, params, language="en")` that POSTs to `https://graph.facebook.com/v23.0/{phone_number_id}/messages`
+- [x] Update `BatchBook/services/notification_service.py` — replace the WATI-stub log lines with real calls into `whatsapp_client`; keep the same four function signatures (`send_enrollment_invite`, `send_fee_reminder`, `send_fee_receipt`, `send_absence_alert`)
 
 ---
 
@@ -350,8 +350,8 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
 - `fee_reminder`: "Hi {{1}}, your fee of ₹{{2}} for {{3}} is due on {{4}}." + URL button → Razorpay payment link (pass the link as the button's dynamic URL param, don't embed it in body text)
 - `fee_receipt`: "Hi {{1}}, payment of ₹{{2}} received for {{3}} on {{4}}. Thank you!"
 
-- [ ] Add to `fee_route.py`: `POST /fee/remind/{record_id}` and `POST /fee/remind-all`
-- [ ] Auto-send `fee_receipt` template after `mark_payment()` succeeds in `fee_service.py`
+- [x] Add to `fee_route.py`: `POST /fee/remind/{record_id}` and `POST /fee/remind-all`
+- [x] Auto-send `fee_receipt` template after `mark_payment()` succeeds in `fee_service.py`
 - [ ] Wire the "Remind" button in `FeesPage.jsx` to call `POST /fee/remind/{record_id}`
 
 ---
@@ -361,9 +361,9 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
 **Template to create in WhatsApp Manager** (category: Utility):
 - `absence_alert`: "Hi, {{1}} was absent from {{2}} today ({{3}}). Please contact us if this is unexpected."
 
-- [ ] Add `send_absence_alert(enrollment_id, date)` to `notification_service.py`
-- [ ] In `attendance_service.py` `bulk_mark()`: after writing ABSENT rows, fire `send_absence_alert` as a background task (use FastAPI `BackgroundTasks`) for each newly-absent enrollment
-- [ ] Don't block the HTTP response on the WhatsApp call — use `BackgroundTasks` so the attendance mark is instant
+- [x] Add `send_absence_alert(enrollment_id, date)` to `notification_service.py`
+- [x] In `attendance_service.py` `bulk_mark()`: after writing ABSENT rows, fire `send_absence_alert` as a background task (use FastAPI `BackgroundTasks`) for each newly-absent enrollment
+- [x] Don't block the HTTP response on the WhatsApp call — use `BackgroundTasks` so the attendance mark is instant
 
 ---
 
