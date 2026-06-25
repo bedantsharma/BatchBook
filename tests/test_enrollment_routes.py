@@ -482,3 +482,63 @@ async def test_remove_enrollment_returns_404_if_not_found(client):
 async def test_remove_enrollment_requires_auth(client):
     response = await client.delete("/enrollment/1")
     assert response.status_code in (401, 422)
+
+
+# ---------------------------------------------------------------------------
+# _verify_student_belongs_to_institute — auto-assign when institute_id is None
+# ---------------------------------------------------------------------------
+
+
+async def test_enroll_student_with_null_institute_id_auto_assigns(client):
+    """Student created without an institute (institute_id=None) should be auto-assigned
+    to the enrolling owner's institute instead of getting a 403."""
+    owner_teacher_id = uuid4()
+    owner, institute, mock_owner_svc, mock_institute_svc = _setup_owner_and_institute(
+        owner_teacher_id, institute_id=10
+    )
+    batch = _make_batch(batch_id=5, institute_id=10)
+    # Student has no institute yet
+    student = _make_student(student_id=20, institute_id=None)
+    enrollment = _make_enrollment()
+
+    mock_enrollment_svc = MagicMock(spec=EnrollmentService)
+    mock_enrollment_svc.enroll_student = AsyncMock(return_value=enrollment)
+
+    from app import app
+    from db.session import get_db
+
+    call_count = {"db_executes": 0}
+
+    async def override_get_db():
+        mock_db = AsyncMock()
+
+        async def fake_execute(stmt):
+            result = MagicMock()
+            call_count["db_executes"] += 1
+            # First call: batch lookup; second call: student lookup
+            if call_count["db_executes"] == 1:
+                result.scalar_one_or_none.return_value = batch
+            else:
+                result.scalar_one_or_none.return_value = student
+            return result
+
+        mock_db.execute = fake_execute
+        mock_db.flush = AsyncMock()
+        yield mock_db
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_owner_service] = lambda: mock_owner_svc
+    app.dependency_overrides[get_institute_service] = lambda: mock_institute_svc
+    app.dependency_overrides[get_enrollment_service] = lambda: mock_enrollment_svc
+
+    response = await client.post(
+        "/enrollment/",
+        json={"student_id": 20, "batch_id": 5, "due_day": 15},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 201, response.json()
+    # Student should have been assigned to the institute
+    assert student.institute_id == 10
+
+    app.dependency_overrides.pop(get_db, None)
