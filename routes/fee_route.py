@@ -2,12 +2,13 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase import AsyncClient
 
+from clients.razorpay_client import get_razorpay_client
 from clients.supabase_client import get_supabase_client
 from db.session import get_db
 from models.batch_base import BatchSchema
@@ -18,7 +19,6 @@ from routes.requests.setup_fee_structure_request import SetupFeeStructureRequest
 from routes.responses.fee_dashboard_response import FeeDashboardResponse
 from routes.responses.fee_record_response import FeeRecordResponse
 from routes.responses.fee_structure_response import FeeStructureResponse
-from clients.razorpay_client import get_razorpay_client
 from routes.responses.payment_link_response import PaymentLinkResponse
 from services.fee_service import FeeService, get_fee_service
 from services.institute_service import InstituteService, get_institute_service
@@ -222,6 +222,7 @@ async def generate_monthly_records(
 async def mark_payment(
     record_id: int,
     request: MarkPaymentRequest,
+    background_tasks: BackgroundTasks,
     fee_service: FeeServiceDep,
     owner_service: OwnerServiceDep,
     institute_service: InstituteServiceDep,
@@ -234,12 +235,20 @@ async def mark_payment(
     - amount_paid == 0 → NOT_PAID
     - 0 < amount_paid < amount_due → PARTIALLY_PAID
     - amount_paid >= amount_due → FULLY_PAID (paid_at is set to now)
+
+    When the fee becomes FULLY_PAID, a WhatsApp fee_receipt is sent to the parent
+    in the background.
     """
+    from models.batch_base import BatchSchema
+    from models.fee_record_base import FeeStatus
+    from models.parent_base import ParentSchema
+    from models.student_base import StudentSchema
+    from services.notification_service import send_fee_receipt
+
     institute_id = await _resolve_institute_id(
         db, owner_user_id, owner_service, institute_service
     )
 
-    # Verify the fee record belongs to this institute
     rec_result = await db.execute(
         select(FeeRecordSchema).where(FeeRecordSchema.id == record_id)
     )
@@ -268,6 +277,29 @@ async def mark_payment(
     except Exception as e:
         logger.error(e)
         raise HTTPException(status_code=500, detail="Failed to record payment — check logs")
+
+    if updated.status == FeeStatus.FULLY_PAID:
+        try:
+            student_result = await db.execute(
+                select(StudentSchema, ParentSchema, BatchSchema)
+                .join(ParentSchema, StudentSchema.parent_id == ParentSchema.id, isouter=True)
+                .join(BatchSchema, BatchSchema.id == enrollment.batch_id)
+                .where(StudentSchema.id == enrollment.student_id)
+            )
+            row = student_result.first()
+            if row:
+                student, parent, batch = row
+                if parent and parent.phone_number:
+                    background_tasks.add_task(
+                        send_fee_receipt,
+                        parent_phone=parent.phone_number,
+                        student_name=student.name or "Student",
+                        amount=float(updated.amount_paid),
+                        batch_name=batch.name,
+                        paid_on=updated.paid_at.strftime("%d %b %Y") if updated.paid_at else "",
+                    )
+        except Exception as e:
+            logger.error(f"Failed to queue fee receipt notification: {e}")
 
     return updated
 
@@ -396,3 +428,152 @@ async def get_payment_link(
         )
 
     return result
+
+
+# ─── POST /fee/remind/{record_id} ─────────────────────────────────────────────
+
+
+@router.post(
+    "/remind/{record_id}",
+    summary="Send a WhatsApp fee reminder to the parent for a specific fee record",
+    status_code=202,
+)
+async def send_fee_reminder_for_record(
+    record_id: int,
+    background_tasks: BackgroundTasks,
+    fee_service: FeeServiceDep,
+    owner_service: OwnerServiceDep,
+    institute_service: InstituteServiceDep,
+    db: AsyncSession = Depends(get_db),
+    owner_user_id: UUID = Depends(_get_current_owner_user_id),
+):
+    """Queue a WhatsApp fee_reminder message for a single fee record.
+
+    Returns 202 Accepted immediately. The WhatsApp call happens in the background.
+    Returns 422 if the fee is already fully paid (no reminder needed).
+    """
+    from models.batch_base import BatchSchema
+    from models.fee_record_base import FeeStatus
+    from models.parent_base import ParentSchema
+    from models.student_base import StudentSchema
+    from services.notification_service import send_fee_reminder
+
+    institute_id = await _resolve_institute_id(
+        db, owner_user_id, owner_service, institute_service
+    )
+
+    rec_result = await db.execute(
+        select(FeeRecordSchema).where(FeeRecordSchema.id == record_id)
+    )
+    fee_record = rec_result.scalar_one_or_none()
+    if not fee_record:
+        raise HTTPException(status_code=404, detail="FeeRecord not found")
+
+    if fee_record.status == FeeStatus.FULLY_PAID:
+        raise HTTPException(status_code=422, detail="Fee is already fully paid")
+
+    enroll_result = await db.execute(
+        select(EnrollmentSchema).where(EnrollmentSchema.id == fee_record.enrollment_id)
+    )
+    enrollment = enroll_result.scalar_one_or_none()
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+
+    await _verify_batch_belongs_to_institute(db, enrollment.batch_id, institute_id)
+
+    student_result = await db.execute(
+        select(StudentSchema, ParentSchema, BatchSchema)
+        .join(ParentSchema, StudentSchema.parent_id == ParentSchema.id, isouter=True)
+        .join(BatchSchema, BatchSchema.id == enrollment.batch_id)
+        .where(StudentSchema.id == enrollment.student_id)
+    )
+    row = student_result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Student data not found")
+
+    student, parent, batch = row
+    if not parent or not parent.phone_number:
+        raise HTTPException(status_code=422, detail="No phone number on record for this parent")
+
+    amount_pending = fee_record.amount_due - fee_record.amount_paid
+    due_date = f"{enrollment.due_day} {fee_record.month.strftime('%b %Y')}"
+
+    background_tasks.add_task(
+        send_fee_reminder,
+        parent_phone=parent.phone_number,
+        student_name=student.name or "Student",
+        amount=float(amount_pending),
+        batch_name=batch.name,
+        due_date=due_date,
+        payment_link=fee_record.payment_link,
+    )
+
+    return {"detail": "Reminder queued", "record_id": record_id}
+
+
+# ─── POST /fee/remind-all ──────────────────────────────────────────────────────
+
+
+@router.post(
+    "/remind-all",
+    summary="Send WhatsApp fee reminders to all parents with unpaid fees for a month",
+    status_code=202,
+)
+async def send_fee_reminders_for_all(
+    background_tasks: BackgroundTasks,
+    fee_service: FeeServiceDep,
+    owner_service: OwnerServiceDep,
+    institute_service: InstituteServiceDep,
+    month: str = Query(..., examples=["2026-05"], description="Month in YYYY-MM format"),
+    db: AsyncSession = Depends(get_db),
+    owner_user_id: UUID = Depends(_get_current_owner_user_id),
+):
+    """Queue WhatsApp fee_reminder messages for every unpaid or partially-paid record
+    in the institute for the given month.
+
+    Returns 202 Accepted with the count of reminders queued. Each WhatsApp call
+    happens in the background so this endpoint returns instantly regardless of
+    how many reminders are sent.
+    """
+    from models.batch_base import BatchSchema
+    from models.fee_record_base import FeeStatus
+    from models.parent_base import ParentSchema
+    from models.student_base import StudentSchema
+    from services.notification_service import send_fee_reminder
+
+    institute_id = await _resolve_institute_id(
+        db, owner_user_id, owner_service, institute_service
+    )
+    month_date = _parse_month(month)
+
+    result = await db.execute(
+        select(FeeRecordSchema, EnrollmentSchema, StudentSchema, ParentSchema, BatchSchema)
+        .join(EnrollmentSchema, FeeRecordSchema.enrollment_id == EnrollmentSchema.id)
+        .join(StudentSchema, EnrollmentSchema.student_id == StudentSchema.id)
+        .outerjoin(ParentSchema, StudentSchema.parent_id == ParentSchema.id)
+        .join(BatchSchema, EnrollmentSchema.batch_id == BatchSchema.id)
+        .where(
+            BatchSchema.institute_id == institute_id,
+            FeeRecordSchema.month == month_date,
+            FeeRecordSchema.status != FeeStatus.FULLY_PAID,
+        )
+    )
+
+    queued = 0
+    for fee_record, enrollment, student, parent, batch in result.all():
+        if not parent or not parent.phone_number:
+            continue
+        amount_pending = fee_record.amount_due - fee_record.amount_paid
+        due_date = f"{enrollment.due_day} {fee_record.month.strftime('%b %Y')}"
+        background_tasks.add_task(
+            send_fee_reminder,
+            parent_phone=parent.phone_number,
+            student_name=student.name or "Student",
+            amount=float(amount_pending),
+            batch_name=batch.name,
+            due_date=due_date,
+            payment_link=fee_record.payment_link,
+        )
+        queued += 1
+
+    return {"detail": f"{queued} reminder(s) queued", "month": month}

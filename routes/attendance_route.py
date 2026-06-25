@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -123,6 +123,7 @@ async def create_session(
 async def mark_attendance(
     session_id: int,
     request: MarkAttendanceRequest,
+    background_tasks: BackgroundTasks,
     attendance_service: AttendanceServiceDep,
     owner_service: OwnerServiceDep,
     institute_service: InstituteServiceDep,
@@ -134,17 +135,19 @@ async def mark_attendance(
     Provide the list of ``enrollment_id`` values for students who were PRESENT.
     Every enrolled student not in that list is marked ABSENT.
     Can be called multiple times — it overwrites previous marks.
+    Parents of newly-absent students receive a WhatsApp absence_alert in the background.
     """
+    from services.notification_service import send_absence_alert
+
     institute_id = await _get_institute_id(db, owner_user_id, owner_service, institute_service)
 
-    # Verify the session's batch belongs to this institute
     session = await attendance_service.attendance_repo.get_session_by_id(db, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     await _verify_batch_belongs_to_institute(db, session.batch_id, institute_id)
 
     try:
-        return await attendance_service.bulk_mark(
+        rows, newly_absent_ids = await attendance_service.bulk_mark(
             db=db,
             session_id=session_id,
             present_enrollment_ids=request.present_enrollment_ids,
@@ -154,6 +157,18 @@ async def mark_attendance(
     except Exception as e:
         logger.error(e)
         raise HTTPException(status_code=500, detail="Failed to mark attendance")
+
+    if newly_absent_ids:
+        try:
+            notifications = await attendance_service.get_absence_notification_data(
+                db=db, session_id=session_id, absent_enrollment_ids=newly_absent_ids
+            )
+            for notification in notifications:
+                background_tasks.add_task(send_absence_alert, **notification)
+        except Exception as e:
+            logger.error(f"Failed to queue absence notifications: {e}")
+
+    return rows
 
 
 # ─── GET /attendance/session/{session_id} ─────────────────────────────────────

@@ -24,8 +24,9 @@ SUPABASE_URL=https://[project-id].supabase.co
 SUPABASE_KEY=sb_publishable_[key]
 RAZORPAY_KEY_ID=rzp_test_xxxxx
 RAZORPAY_KEY_SECRET=xxxxxxxx
-WATI_API_ENDPOINT=https://live-mt-server.wati.io/XXXXX
-WATI_API_TOKEN=xxxxxxxx
+META_WHATSAPP_TOKEN=xxxxxxxx
+META_WHATSAPP_PHONE_NUMBER_ID=xxxxxxxx
+WABA_ID=xxxxxxxx
 ```
 
 Create `batchbookui/.env`:
@@ -78,7 +79,7 @@ In the local Docker prod stack (`make prod`), a one-shot `alembic-check` contain
 ## Testing
 
 ```bash
-uv run pytest -v        # 247+ tests — models, routes, services
+uv run pytest -v        # 261+ tests — models, routes, services
 ```
 
 Test DB is in-memory SQLite (`aiosqlite`), injected via dependency override in `tests/conftest.py`.
@@ -98,7 +99,7 @@ npx playwright test
 
 ## Deployment
 
-- **Frontend:** Vercel, auto-deploys from the `batchbookui` repo on push. Live at `batchbookui.vercel.app`. the design system of the project lives in batchbookui/batchbook-design-system
+- **Frontend:** Vercel, auto-deploys from the `batchbookui` repo on push. Live at `batchbook.in`. The design system lives in `batchbookui/batchbook-design-system`.
 - **Backend:** Render.com, Docker web service built from the root `Dockerfile` (`prod` stage).
 - **Domain:** `batchbook.in` (Namecheap) — `api.batchbook.in` → Render, `batchbook.in`/`www` → Vercel.
 - **Database:** Supabase Postgres (no separate DB hosting cost).
@@ -107,7 +108,7 @@ Render builds a single Dockerfile, not `docker-compose.prod.yml` (that file is o
 
 1. **Port** — set env var `PORT=8000` in Render's dashboard to match the hardcoded `uvicorn --port 8000` in the Dockerfile.
 2. **Migrations aren't auto-checked** — Render doesn't run the `alembic-check` compose service. Run `uv run alembic upgrade head` against the prod `DATABASE_URL` manually before/after a deploy that changes the schema.
-3. **Env vars must be set individually** in the Render dashboard — Render doesn't read `.env` files: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `PROJECT_NAME`, `PORT`.
+3. **Env vars must be set individually** in the Render dashboard — Render doesn't read `.env` files: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `META_WHATSAPP_TOKEN`, `META_WHATSAPP_PHONE_NUMBER_ID`, `WABA_ID`, `PROJECT_NAME`, `PORT`.
 4. **CORS** — production origins must be added to `allow_origins` in `app.py` before the first deploy to avoid a redeploy just for CORS.
 
 Full deployment checklist and current project status: see [`BATCHBOOK_ROADMAP_V2.md`](./BATCHBOOK_ROADMAP_V2.md).

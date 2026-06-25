@@ -56,10 +56,13 @@ class AttendanceService:
         db: AsyncSession,
         session_id: int,
         present_enrollment_ids: list[int],
-    ) -> list[AttendanceSchema]:
+    ) -> tuple[list[AttendanceSchema], list[int]]:
         """Set given enrollments to PRESENT; all others in the session stay ABSENT.
 
-        Returns the full attendance list for the session after marking.
+        Returns (full_attendance_list, newly_absent_enrollment_ids).
+        newly_absent_enrollment_ids contains only enrollment IDs whose status
+        changed TO ABSENT in this call — use these to fire absence notifications.
+
         Raises ValueError if the session does not exist.
         """
         session = await self.attendance_repo.get_session_by_id(db, session_id)
@@ -68,6 +71,7 @@ class AttendanceService:
 
         rows = await self.attendance_repo.get_by_session(db, session_id)
         present_set = set(present_enrollment_ids)
+        newly_absent_ids: list[int] = []
 
         for row in rows:
             target_status = (
@@ -77,8 +81,59 @@ class AttendanceService:
             )
             if row.status != target_status:
                 await self.attendance_repo.update_status(db, row, target_status)
+                if target_status == AttendanceStatus.ABSENT:
+                    newly_absent_ids.append(row.enrollment_id)
 
-        return await self.attendance_repo.get_by_session(db, session_id)
+        updated_rows = await self.attendance_repo.get_by_session(db, session_id)
+        return updated_rows, newly_absent_ids
+
+    async def get_absence_notification_data(
+        self,
+        db: AsyncSession,
+        session_id: int,
+        absent_enrollment_ids: list[int],
+    ) -> list[dict]:
+        """Return notification payloads for absence alerts.
+
+        Each dict contains the kwargs for send_absence_alert:
+        {parent_phone, student_name, batch_name, date}.
+        Enrollments with no parent phone are silently skipped.
+        """
+        from sqlalchemy import select
+
+        from models.batch_base import BatchSchema
+        from models.enrollment_base import EnrollmentSchema
+        from models.parent_base import ParentSchema
+        from models.student_base import StudentSchema
+
+        if not absent_enrollment_ids:
+            return []
+
+        session = await self.attendance_repo.get_session_by_id(db, session_id)
+        if not session:
+            return []
+
+        result = await db.execute(
+            select(EnrollmentSchema, StudentSchema, ParentSchema, BatchSchema)
+            .join(StudentSchema, EnrollmentSchema.student_id == StudentSchema.id)
+            .outerjoin(ParentSchema, StudentSchema.parent_id == ParentSchema.id)
+            .join(BatchSchema, EnrollmentSchema.batch_id == BatchSchema.id)
+            .where(EnrollmentSchema.id.in_(absent_enrollment_ids))
+        )
+
+        notifications: list[dict] = []
+        for _enrollment, student, parent, batch in result.all():
+            if not parent or not parent.phone_number:
+                continue
+            notifications.append(
+                {
+                    "parent_phone": parent.phone_number,
+                    "student_name": student.name or "Student",
+                    "batch_name": batch.name,
+                    "date": session.date.strftime("%d %b %Y"),
+                }
+            )
+        return notifications
 
     async def get_session_attendance(
         self, db: AsyncSession, session_id: int
@@ -105,7 +160,6 @@ class AttendanceService:
 
         month_str: "YYYY-MM"
         """
-        from datetime import datetime
 
         year, month = (int(p) for p in month_str.split("-"))
         start = date(year, month, 1)
