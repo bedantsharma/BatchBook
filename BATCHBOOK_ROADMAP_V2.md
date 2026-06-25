@@ -71,7 +71,7 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 | **A** | Fix ship-blockers — nginx, stats, student tabs | 🟡 PARTIAL — A.1 ✅ A.2 ✅ A.4 ✅ A.5 ✅ · A.3 pending manual test |
 | **B** | Landing page (real marketing page + WATI website URL) | ✅ DONE — deployed at batchbookui.vercel.app |
 | **C** | Deployment — hosting, domain, SSL, CI/CD | 🟡 PARTIAL — C.1 ✅ C.2 ✅ C.3 ✅ C.4 ✅ · C.5 (smoke test) remaining |
-| **D** | WhatsApp notifications via Meta Cloud API direct (fee reminders, absence alerts) | 🟡 PARTIAL — D.0 ✅ D.1 ✅ D.2 ✅ D.3 ✅ · FeesPage "Remind" button (frontend) pending |
+| **D** | WhatsApp notifications via Meta Cloud API direct (fee reminders, absence alerts) | ✅ DONE — D.0 ✅ D.1 ✅ D.2 ✅ D.3 ✅ · PRs open: BatchBook #33 + batchbookui #26 |
 | **F** | Multi-tenant payments — owner brings their own Razorpay account (BYO keys) + per-tenant webhooks | 🟢 READY — decision finalized 2026-06-23, not yet built |
 | **E** | Polish — multi-child, streak, receipts, E2E CI | ⬜ NOT-STARTED |
 
@@ -352,7 +352,7 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
 
 - [x] Add to `fee_route.py`: `POST /fee/remind/{record_id}` and `POST /fee/remind-all`
 - [x] Auto-send `fee_receipt` template after `mark_payment()` succeeds in `fee_service.py`
-- [ ] Wire the "Remind" button in `FeesPage.jsx` to call `POST /fee/remind/{record_id}`
+- [x] Wire the "Remind" button in `FeesPage.jsx` to call `POST /fee/remind/{record_id}` (batchbookui PR #26)
 
 ---
 
