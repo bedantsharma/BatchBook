@@ -85,14 +85,21 @@ async def _verify_batch_belongs_to_institute(
 async def _verify_student_belongs_to_institute(
     db: AsyncSession, student_id: int, institute_id: int
 ) -> None:
-    """Raise 404 if the student does not exist or does not belong to this institute."""
+    """Raise 404 if the student does not exist or does not belong to this institute.
+
+    If the student was created without an institute (e.g. via the admin POST /student/
+    endpoint), auto-assigns them to the calling owner's institute on first enrollment.
+    """
     result = await db.execute(
         select(StudentSchema).where(StudentSchema.id == student_id)
     )
     student = result.scalar_one_or_none()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
-    if student.institute_id != institute_id:
+    if student.institute_id is None:
+        student.institute_id = institute_id
+        await db.flush()
+    elif student.institute_id != institute_id:
         raise HTTPException(
             status_code=403,
             detail="Student does not belong to your institute",
