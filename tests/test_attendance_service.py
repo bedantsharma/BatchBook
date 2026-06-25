@@ -149,7 +149,7 @@ async def test_bulk_mark_marks_given_ids_present(db_session, service):
     )
 
     e1, e2, e3 = enrollments
-    rows = await service.bulk_mark(
+    rows, _ = await service.bulk_mark(
         db=db_session,
         session_id=session.id,
         present_enrollment_ids=[e1.id, e3.id],
@@ -179,7 +179,7 @@ async def test_bulk_mark_all_present(db_session, service):
     )
 
     all_ids = [e.id for e in enrollments]
-    rows = await service.bulk_mark(db=db_session, session_id=session.id, present_enrollment_ids=all_ids)
+    rows, _ = await service.bulk_mark(db=db_session, session_id=session.id, present_enrollment_ids=all_ids)
     assert all(r.status == AttendanceStatus.PRESENT for r in rows)
 
 
@@ -200,7 +200,7 @@ async def test_bulk_mark_none_present(db_session, service):
         end_time=time(17, 0),
     )
 
-    rows = await service.bulk_mark(db=db_session, session_id=session.id, present_enrollment_ids=[])
+    rows, _ = await service.bulk_mark(db=db_session, session_id=session.id, present_enrollment_ids=[])
     assert all(r.status == AttendanceStatus.ABSENT for r in rows)
 
 
