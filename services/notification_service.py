@@ -9,8 +9,17 @@ Phone number format: parent_phone must be the 10-digit Indian mobile number
 """
 
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from clients.whatsapp_client import send_template_message
+from models.notification_base import (
+    NotificationSchema,
+    NotificationStatus,
+    NotificationType,
+)
+from repositories.notification_repository import NotificationRepository
+
+_REMINDER_TYPES = {NotificationType.FEE_REMINDER, NotificationType.ABSENCE}
 
 
 def _to(parent_phone: str) -> str:
@@ -129,3 +138,100 @@ async def send_absence_alert(
             f"[WhatsApp] absence_alert failed for +91{parent_phone} "
             f"student={student_name!r} date={date}: {exc}"
         )
+
+
+async def dispatch_in_background(**kwargs) -> None:
+    """Background-task wrapper: opens its own DB session and dispatches.
+
+    Pass the same keyword args as ``dispatch`` minus ``db``.
+    """
+    from db.session import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        try:
+            await dispatch(db, **kwargs)
+        except Exception as exc:  # never let a background failure escape
+            logger.error(f"[WhatsApp] background dispatch failed: {exc}")
+
+
+async def dispatch(
+    db: AsyncSession,
+    *,
+    parent,
+    student_id: int | None,
+    institute_id: int | None,
+    type: NotificationType,
+    template_name: str,
+    components: list[dict],
+    join_url: str | None = None,
+    force: bool = False,
+) -> NotificationSchema:
+    """Send a WhatsApp template (verification-gated) and audit the result.
+
+    - Verified parent (``parent.user_id`` set) or non-reminder type → send ``template_name``.
+    - Unverified parent + reminder type → send ``enrollment_invite`` link instead and log
+      status ``skipped_unverified``.
+    - Every outcome (sent / skipped / failed) is persisted to the Notification table with the
+      message components, institute_id, and the raw WhatsApp API response in ``meta_data``.
+    """
+    repo = NotificationRepository()
+    verified = parent is not None and parent.user_id is not None
+    is_reminder = type in _REMINDER_TYPES
+
+    if not verified and is_reminder and not force:
+        if join_url is None:
+            # Cannot build a valid enrollment_invite without a link. Sending the original
+            # reminder components under the enrollment_invite template would cause a
+            # guaranteed Meta API param-mismatch (3-param template vs 5-param body).
+            # Skip the send entirely and record the reason.
+            notification = NotificationSchema(
+                parent_id=getattr(parent, "id", None),
+                student_id=student_id,
+                institute_id=institute_id,
+                type=type,
+                status=NotificationStatus.SKIPPED_UNVERIFIED,
+                reason="parent number not verified; no invite link available",
+                meta_data={
+                    "message": {"template": template_name, "components": components},
+                    "institute_id": institute_id,
+                    "whatsapp_response": None,
+                },
+            )
+            return await repo.create(db, notification)
+        # Re-invite instead of reminding (join_url is available)
+        sent_template = "enrollment_invite"
+        sent_components = _body("Student", "your institute", join_url)
+        status = NotificationStatus.SKIPPED_UNVERIFIED
+        reason = "parent number not verified"
+    else:
+        status = NotificationStatus.SENT
+        reason = None
+        sent_template = template_name
+        sent_components = components
+
+    whatsapp_response = None
+    try:
+        whatsapp_response = await send_template_message(
+            to=_to(parent.phone_number),
+            template_name=sent_template,
+            components=sent_components,
+        )
+    except Exception as exc:
+        status = NotificationStatus.FAILED
+        reason = str(exc)
+        logger.error(f"[WhatsApp] dispatch {sent_template} failed: {exc}")
+
+    notification = NotificationSchema(
+        parent_id=getattr(parent, "id", None),
+        student_id=student_id,
+        institute_id=institute_id,
+        type=type,
+        status=status,
+        reason=reason,
+        meta_data={
+            "message": {"template": sent_template, "components": sent_components},
+            "institute_id": institute_id,
+            "whatsapp_response": whatsapp_response,
+        },
+    )
+    return await repo.create(db, notification)

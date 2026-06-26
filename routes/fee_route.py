@@ -454,9 +454,10 @@ async def send_fee_reminder_for_record(
     """
     from models.batch_base import BatchSchema
     from models.fee_record_base import FeeStatus
+    from models.notification_base import NotificationType
     from models.parent_base import ParentSchema
     from models.student_base import StudentSchema
-    from services.notification_service import send_fee_reminder
+    from services.notification_service import _body, dispatch_in_background
 
     institute_id = await _resolve_institute_id(
         db, owner_user_id, owner_service, institute_service
@@ -498,14 +499,24 @@ async def send_fee_reminder_for_record(
     amount_pending = fee_record.amount_due - fee_record.amount_paid
     due_date = f"{enrollment.due_day} {fee_record.month.strftime('%b %Y')}"
 
+    inst = await institute_service.institute_repo.get_by_id(db, institute_id)
+    join_url = f"https://batchbook.in/join/{inst.join_code}" if inst and inst.join_code else None
+    link_text = fee_record.payment_link or "Contact your institute"
+    amount_str = (
+        f"{int(amount_pending):,}"
+        if amount_pending == int(amount_pending)
+        else f"{float(amount_pending):.2f}"
+    )
+    components = _body(student.name or "Student", amount_str, batch.name, due_date, link_text)
     background_tasks.add_task(
-        send_fee_reminder,
-        parent_phone=parent.phone_number,
-        student_name=student.name or "Student",
-        amount=float(amount_pending),
-        batch_name=batch.name,
-        due_date=due_date,
-        payment_link=fee_record.payment_link,
+        dispatch_in_background,
+        parent=parent,
+        student_id=student.id,
+        institute_id=institute_id,
+        type=NotificationType.FEE_REMINDER,
+        template_name="fee_reminder",
+        components=components,
+        join_url=join_url,
     )
 
     return {"detail": "Reminder queued", "record_id": record_id}
@@ -537,14 +548,18 @@ async def send_fee_reminders_for_all(
     """
     from models.batch_base import BatchSchema
     from models.fee_record_base import FeeStatus
+    from models.notification_base import NotificationType
     from models.parent_base import ParentSchema
     from models.student_base import StudentSchema
-    from services.notification_service import send_fee_reminder
+    from services.notification_service import _body, dispatch_in_background
 
     institute_id = await _resolve_institute_id(
         db, owner_user_id, owner_service, institute_service
     )
     month_date = _parse_month(month)
+
+    inst = await institute_service.institute_repo.get_by_id(db, institute_id)
+    join_url = f"https://batchbook.in/join/{inst.join_code}" if inst and inst.join_code else None
 
     result = await db.execute(
         select(FeeRecordSchema, EnrollmentSchema, StudentSchema, ParentSchema, BatchSchema)
@@ -565,14 +580,24 @@ async def send_fee_reminders_for_all(
             continue
         amount_pending = fee_record.amount_due - fee_record.amount_paid
         due_date = f"{enrollment.due_day} {fee_record.month.strftime('%b %Y')}"
+        link_text = fee_record.payment_link or "Contact your institute"
+        amount_str = (
+            f"{int(amount_pending):,}"
+            if amount_pending == int(amount_pending)
+            else f"{float(amount_pending):.2f}"
+        )
+        components = _body(
+            student.name or "Student", amount_str, batch.name, due_date, link_text
+        )
         background_tasks.add_task(
-            send_fee_reminder,
-            parent_phone=parent.phone_number,
-            student_name=student.name or "Student",
-            amount=float(amount_pending),
-            batch_name=batch.name,
-            due_date=due_date,
-            payment_link=fee_record.payment_link,
+            dispatch_in_background,
+            parent=parent,
+            student_id=student.id,
+            institute_id=institute_id,
+            type=NotificationType.FEE_REMINDER,
+            template_name="fee_reminder",
+            components=components,
+            join_url=join_url,
         )
         queued += 1
 

@@ -489,6 +489,160 @@ async def test_remove_enrollment_requires_auth(client):
 # ---------------------------------------------------------------------------
 
 
+async def test_invite_student_creates_enrollment_invite_audit_row(client, db_session, monkeypatch):
+    """Fix 2 (route-level): POST /enrollment/invite must write a Notification row with
+    type=ENROLLMENT_INVITE and status=SENT via dispatch — not via the bare
+    send_enrollment_invite helper that produced no audit trail.
+    """
+    from services import notification_service
+
+    async def _send(to, template_name, components=None, language="en"):
+        return {"messages": [{"id": "wamid.ROUTE_AUDIT"}]}
+
+    monkeypatch.setattr(notification_service, "send_template_message", _send)
+
+    owner_teacher_id = uuid4()
+    owner, institute, mock_owner_svc, mock_institute_svc = _setup_owner_and_institute(
+        owner_teacher_id, institute_id=10
+    )
+
+    # Institute needs name + join_code for the invite URL
+    inst_obj = MagicMock()
+    inst_obj.name = "Sharma Classes"
+    inst_obj.join_code = "TESTJOIN"
+    mock_institute_svc.institute_repo = MagicMock()
+    mock_institute_svc.institute_repo.get_by_id = AsyncMock(return_value=inst_obj)
+
+    enrollment = _make_enrollment(student_id=77, batch_id=5)
+    mock_enrollment_svc = MagicMock(spec=EnrollmentService)
+    mock_enrollment_svc.invite_student = AsyncMock(return_value=enrollment)
+
+    # Pre-create the parent in the test DB so the route's get_by_phone() can find them
+    from models.parent_base import ParentSchema
+    from repositories.parent_repository import ParentRepository
+
+    parent = ParentSchema(phone_number="9787878787", name="Test Parent", user_id=None)
+    await ParentRepository().create_parent(db_session, parent)
+
+    from app import app
+
+    app.dependency_overrides[get_owner_service] = lambda: mock_owner_svc
+    app.dependency_overrides[get_institute_service] = lambda: mock_institute_svc
+    app.dependency_overrides[get_enrollment_service] = lambda: mock_enrollment_svc
+
+    with patch("routes.enrollment_route._verify_batch_belongs_to_institute", new=AsyncMock()):
+        response = await client.post(
+            "/enrollment/invite",
+            json={
+                "student_name": "Invite Student",
+                "parent_phone": "9787878787",
+                "batch_id": 5,
+                "due_day": 15,
+            },
+            headers={"Authorization": "Bearer sometoken"},
+        )
+
+    assert response.status_code == 201
+
+    # Verify the Notification audit row was written to the DB
+    from sqlalchemy import select
+
+    from models.notification_base import NotificationSchema, NotificationStatus, NotificationType
+
+    result = await db_session.execute(
+        select(NotificationSchema).where(
+            NotificationSchema.type == NotificationType.ENROLLMENT_INVITE
+        )
+    )
+    notif = result.scalar_one_or_none()
+    assert notif is not None, "No ENROLLMENT_INVITE audit row found — route is not calling dispatch"
+    assert notif.status == NotificationStatus.SENT
+    assert notif.type == NotificationType.ENROLLMENT_INVITE
+
+
+async def test_invite_student_audit_failure_does_not_break_enrollment(
+    client, db_session, monkeypatch
+):
+    """Resilience: when the Notification audit write raises, POST /enrollment/invite must
+    still return 201 and the parent + student + enrollment must remain committed in the DB.
+
+    The invariant relies on enrollment_repo.create() committing the enrollment transaction
+    before dispatch() is attempted.  A NotificationRepository.create failure therefore
+    cannot roll back the already-committed enrollment.
+    """
+    from repositories import notification_repository as notif_repo_mod
+    from services import notification_service
+
+    # Stub WhatsApp so dispatch() doesn't hit the network
+    async def _noop_send(to, template_name, components=None, language="en"):
+        return {}
+
+    monkeypatch.setattr(notification_service, "send_template_message", _noop_send)
+
+    # Make the audit DB write fail to simulate e.g. a transient Notification table error
+    async def _audit_raise(self, db, notification):
+        raise RuntimeError("Simulated notification DB failure")
+
+    monkeypatch.setattr(notif_repo_mod.NotificationRepository, "create", _audit_raise)
+
+    owner_teacher_id = uuid4()
+    owner, institute, mock_owner_svc, mock_institute_svc = _setup_owner_and_institute(
+        owner_teacher_id, institute_id=10
+    )
+
+    inst_obj = MagicMock()
+    inst_obj.name = "Sharma Classes"
+    inst_obj.join_code = "TESTJOIN"
+    mock_institute_svc.institute_repo = MagicMock()
+    mock_institute_svc.institute_repo.get_by_id = AsyncMock(return_value=inst_obj)
+
+    from app import app
+
+    app.dependency_overrides[get_owner_service] = lambda: mock_owner_svc
+    app.dependency_overrides[get_institute_service] = lambda: mock_institute_svc
+    # Do NOT mock enrollment_service — use the real implementation so parent/student/enrollment
+    # are actually written to (and committed in) db_session.
+
+    with patch("routes.enrollment_route._verify_batch_belongs_to_institute", new=AsyncMock()):
+        response = await client.post(
+            "/enrollment/invite",
+            json={
+                "student_name": "Riya Gupta",
+                "parent_phone": "9100200300",
+                "batch_id": 5,
+                "due_day": 10,
+            },
+            headers={"Authorization": "Bearer sometoken"},
+        )
+
+    # Audit write failing must NOT break the invite — still 201
+    assert response.status_code == 201, (
+        f"Expected 201 even when audit fails, got {response.status_code}: {response.json()}"
+    )
+
+    # Parent and student must be persisted (committed before the failed audit was attempted)
+    from sqlalchemy import select
+
+    from models.parent_base import ParentSchema
+    from models.student_base import StudentSchema
+
+    parent_result = await db_session.execute(
+        select(ParentSchema).where(ParentSchema.phone_number == "9100200300")
+    )
+    persisted_parent = parent_result.scalar_one_or_none()
+    assert persisted_parent is not None, (
+        "Parent was NOT persisted — enrollment was probably rolled back when audit failed"
+    )
+
+    student_result = await db_session.execute(
+        select(StudentSchema).where(StudentSchema.name == "Riya Gupta")
+    )
+    persisted_student = student_result.scalar_one_or_none()
+    assert persisted_student is not None, (
+        "Student was NOT persisted — enrollment was probably rolled back when audit failed"
+    )
+
+
 async def test_enroll_student_with_null_institute_id_auto_assigns(client):
     """Student created without an institute (institute_id=None) should be auto-assigned
     to the enrolling owner's institute instead of getting a 403."""

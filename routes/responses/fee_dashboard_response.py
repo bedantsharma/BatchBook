@@ -18,6 +18,9 @@ class FeeRecordSummary(BaseModel):
     paid_at: datetime | None
     payment_reference: str | None
     payment_link: str | None
+    parent_is_verified: bool = True
+    last_notification_status: str | None = None
+    last_notification_reason: str | None = None
 
 
 class FeeDashboardResponse(BaseModel):

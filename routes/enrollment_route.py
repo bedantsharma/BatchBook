@@ -1,4 +1,3 @@
-from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
@@ -11,13 +10,16 @@ from supabase import AsyncClient
 from clients.supabase_client import get_supabase_client
 from db.session import get_db
 from models.batch_base import BatchSchema
+from models.notification_base import NotificationType
 from models.student_base import StudentSchema
+from repositories.parent_repository import ParentRepository
 from routes.requests.create_enrollment_request import CreateEnrollmentRequest
 from routes.requests.invite_student_request import InviteStudentRequest
 from routes.requests.update_enrollment_request import UpdateEnrollmentRequest
 from routes.responses.enrollment_response import EnrollmentResponse
 from services.enrollment_service import EnrollmentService, get_enrollment_service
 from services.institute_service import InstituteService, get_institute_service
+from services.notification_service import dispatch
 from services.owner_service import OwnerService, get_owner_service
 
 router = APIRouter(prefix="/enrollment")
@@ -126,10 +128,9 @@ async def invite_student(
     """Create a parent + student record pre-linked to the owner's institute, then enroll.
 
     The parent can log in via OTP at any time and will see their child's data immediately.
-    A WATI WhatsApp notification is attempted (currently a stub until WATI credentials arrive).
+    A WhatsApp enrollment_invite is sent and audited via dispatch so every send has a
+    Notification row in the database.
     """
-    from services.notification_service import send_enrollment_invite
-
     institute_id = await _resolve_institute_id(db, owner_user_id, owner_service, institute_service)
     await _verify_batch_belongs_to_institute(db, request.batch_id, institute_id)
 
@@ -154,14 +155,55 @@ async def invite_student(
         logger.error(e)
         raise HTTPException(status_code=500, detail="Failed to invite student — check logs")
 
+    from urllib.parse import quote
+
     base_url = "https://batchbook.in"
-    join_url = f"{base_url}/join/{join_code}"
-    await send_enrollment_invite(
-        parent_phone=request.parent_phone,
-        student_name=request.student_name,
-        institute_name=institute_name,
-        join_url=join_url,
-    )
+    join_url = f"{base_url}/join/{join_code}?student={quote(request.student_name)}"
+
+    # Route the invite send through dispatch so every outcome is audited.
+    # ENROLLMENT_INVITE is not a reminder type, so dispatch always attempts the send
+    # regardless of parent verification status.
+    #
+    # Safety note: enrollment_repo.create() (called inside invite_student()) already
+    # called db.commit(), so parent/student/enrollment are durably committed before we
+    # reach here.  A dispatch failure therefore cannot roll back the enrollment.
+    # We still wrap dispatch() in try/except so that an audit-write error (e.g. a
+    # transient Notification DB failure) is logged and swallowed — it must never turn
+    # a successful 201 into a 500.
+    parent = await ParentRepository().get_by_phone(db, request.parent_phone)
+    if parent is None:
+        logger.warning(
+            f"[enrollment_invite] parent lookup returned None for phone={request.parent_phone!r} "
+            f"after invite_student — ENROLLMENT_INVITE audit row SKIPPED "
+            f"(student_id={enrollment.student_id})"
+        )
+    else:
+        invite_components = [
+            {
+                "type": "body",
+                "parameters": [
+                    {"type": "text", "text": request.student_name},
+                    {"type": "text", "text": institute_name},
+                    {"type": "text", "text": join_url},
+                ],
+            }
+        ]
+        try:
+            await dispatch(
+                db,
+                parent=parent,
+                student_id=enrollment.student_id,
+                institute_id=institute_id,
+                type=NotificationType.ENROLLMENT_INVITE,
+                template_name="enrollment_invite",
+                components=invite_components,
+                join_url=join_url,
+            )
+        except Exception as exc:
+            logger.error(
+                f"[enrollment_invite] dispatch failed (non-fatal — enrollment already committed): "
+                f"parent_id={parent.id} student_id={enrollment.student_id} — {exc}"
+            )
 
     return enrollment
 
