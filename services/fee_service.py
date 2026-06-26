@@ -138,11 +138,15 @@ class FeeService:
           - total_collected (Decimal)
           - total_pending (Decimal)
           - collection_rate (float, percent)
-          - records (list of dicts with student_name, batch_name, and record fields)
+          - records (list of dicts with student_name, batch_name, record fields,
+                     parent_is_verified, last_notification_status,
+                     last_notification_reason)
         """
         from models.batch_base import BatchSchema
         from models.enrollment_base import EnrollmentSchema
+        from models.parent_base import ParentSchema
         from models.student_base import StudentSchema
+        from repositories.notification_repository import NotificationRepository
 
         result = await db.execute(
             select(
@@ -150,9 +154,11 @@ class FeeService:
                 EnrollmentSchema,
                 StudentSchema,
                 BatchSchema,
+                ParentSchema,
             )
             .join(EnrollmentSchema, FeeRecordSchema.enrollment_id == EnrollmentSchema.id)
             .join(StudentSchema, EnrollmentSchema.student_id == StudentSchema.id)
+            .outerjoin(ParentSchema, StudentSchema.parent_id == ParentSchema.id)
             .join(BatchSchema, EnrollmentSchema.batch_id == BatchSchema.id)
             .where(
                 BatchSchema.institute_id == institute_id,
@@ -161,13 +167,20 @@ class FeeService:
         )
         rows = result.all()
 
+        # Batch-fetch latest notifications for all students in one query (no N+1)
+        student_ids = [row[2].id for row in rows]
+        latest_notifications = await NotificationRepository().get_latest_by_student_ids(
+            db, student_ids
+        )
+
         total_due = Decimal("0")
         total_collected = Decimal("0")
         records_out = []
 
-        for fee_record, enrollment, student, batch in rows:
+        for fee_record, _enrollment, student, batch, parent in rows:
             total_due += fee_record.amount_due
             total_collected += fee_record.amount_paid
+            note = latest_notifications.get(student.id)
             records_out.append(
                 {
                     "id": fee_record.id,
@@ -181,6 +194,9 @@ class FeeService:
                     "paid_at": fee_record.paid_at,
                     "payment_reference": fee_record.payment_reference,
                     "payment_link": fee_record.payment_link,
+                    "parent_is_verified": parent.user_id is not None if parent else False,
+                    "last_notification_status": note.status.value if note else None,
+                    "last_notification_reason": note.reason if note else None,
                 }
             )
 
