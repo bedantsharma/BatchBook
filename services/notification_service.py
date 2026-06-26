@@ -179,14 +179,30 @@ async def dispatch(
     is_reminder = type in _REMINDER_TYPES
 
     if not verified and is_reminder and not force:
-        # Re-invite instead of reminding an unverified number
-        invite_components = (
-            _body("Student", "your institute", join_url) if join_url else components
-        )
+        if join_url is None:
+            # Cannot build a valid enrollment_invite without a link. Sending the original
+            # reminder components under the enrollment_invite template would cause a
+            # guaranteed Meta API param-mismatch (3-param template vs 5-param body).
+            # Skip the send entirely and record the reason.
+            notification = NotificationSchema(
+                parent_id=getattr(parent, "id", None),
+                student_id=student_id,
+                institute_id=institute_id,
+                type=type,
+                status=NotificationStatus.SKIPPED_UNVERIFIED,
+                reason="parent number not verified; no invite link available",
+                meta_data={
+                    "message": {"template": template_name, "components": components},
+                    "institute_id": institute_id,
+                    "whatsapp_response": None,
+                },
+            )
+            return await repo.create(db, notification)
+        # Re-invite instead of reminding (join_url is available)
+        sent_template = "enrollment_invite"
+        sent_components = _body("Student", "your institute", join_url)
         status = NotificationStatus.SKIPPED_UNVERIFIED
         reason = "parent number not verified"
-        sent_template = "enrollment_invite"
-        sent_components = invite_components
     else:
         status = NotificationStatus.SENT
         reason = None

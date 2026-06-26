@@ -73,3 +73,47 @@ async def test_send_failure_logs_failed(db_session, monkeypatch):
     )
     assert log.status == NotificationStatus.FAILED
     assert "api down" in (log.reason or "")
+
+
+@pytest.mark.asyncio
+async def test_unverified_reminder_no_join_url_skips_without_send(db_session, fake_send):
+    """Fix 1: unverified parent + reminder + join_url=None must NOT call send_template_message.
+
+    The bug was that dispatch fell back to the 5-param fee_reminder components but still
+    sent them under the 3-param enrollment_invite template, causing a guaranteed Meta API
+    param-mismatch. The fix: early-return SKIPPED_UNVERIFIED with a "no invite link
+    available" note and never touch send_template_message.
+    """
+    repo = ParentRepository()
+    parent = ParentSchema(phone_number="9111222333", name="D", user_id=None)
+    await repo.create_parent(db_session, parent)
+
+    log = await notification_service.dispatch(
+        db_session,
+        parent=parent,
+        student_id=4,
+        institute_id=8,
+        type=NotificationType.FEE_REMINDER,
+        template_name="fee_reminder",
+        components=[
+            {
+                "type": "body",
+                "parameters": [
+                    {"type": "text", "text": "Rahul"},
+                    {"type": "text", "text": "1000"},
+                    {"type": "text", "text": "Maths"},
+                    {"type": "text", "text": "2026-07-01"},
+                    {"type": "text", "text": "Contact us"},
+                ],
+            }
+        ],
+        join_url=None,
+    )
+
+    # Status and reason must reflect the skip
+    assert log.status == NotificationStatus.SKIPPED_UNVERIFIED
+    assert log.reason == "parent number not verified; no invite link available"
+    # whatsapp_response must be None — we never hit the API
+    assert log.meta_data["whatsapp_response"] is None
+    # The monkeypatched send must NOT have been called at all
+    assert len(fake_send) == 0

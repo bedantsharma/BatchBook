@@ -489,6 +489,77 @@ async def test_remove_enrollment_requires_auth(client):
 # ---------------------------------------------------------------------------
 
 
+async def test_invite_student_creates_enrollment_invite_audit_row(client, db_session, monkeypatch):
+    """Fix 2 (route-level): POST /enrollment/invite must write a Notification row with
+    type=ENROLLMENT_INVITE and status=SENT via dispatch — not via the bare
+    send_enrollment_invite helper that produced no audit trail.
+    """
+    from services import notification_service
+
+    async def _send(to, template_name, components=None, language="en"):
+        return {"messages": [{"id": "wamid.ROUTE_AUDIT"}]}
+
+    monkeypatch.setattr(notification_service, "send_template_message", _send)
+
+    owner_teacher_id = uuid4()
+    owner, institute, mock_owner_svc, mock_institute_svc = _setup_owner_and_institute(
+        owner_teacher_id, institute_id=10
+    )
+
+    # Institute needs name + join_code for the invite URL
+    inst_obj = MagicMock()
+    inst_obj.name = "Sharma Classes"
+    inst_obj.join_code = "TESTJOIN"
+    mock_institute_svc.institute_repo = MagicMock()
+    mock_institute_svc.institute_repo.get_by_id = AsyncMock(return_value=inst_obj)
+
+    enrollment = _make_enrollment(student_id=77, batch_id=5)
+    mock_enrollment_svc = MagicMock(spec=EnrollmentService)
+    mock_enrollment_svc.invite_student = AsyncMock(return_value=enrollment)
+
+    # Pre-create the parent in the test DB so the route's get_by_phone() can find them
+    from models.parent_base import ParentSchema
+    from repositories.parent_repository import ParentRepository
+
+    parent = ParentSchema(phone_number="9787878787", name="Test Parent", user_id=None)
+    await ParentRepository().create_parent(db_session, parent)
+
+    from app import app
+
+    app.dependency_overrides[get_owner_service] = lambda: mock_owner_svc
+    app.dependency_overrides[get_institute_service] = lambda: mock_institute_svc
+    app.dependency_overrides[get_enrollment_service] = lambda: mock_enrollment_svc
+
+    with patch("routes.enrollment_route._verify_batch_belongs_to_institute", new=AsyncMock()):
+        response = await client.post(
+            "/enrollment/invite",
+            json={
+                "student_name": "Invite Student",
+                "parent_phone": "9787878787",
+                "batch_id": 5,
+                "due_day": 15,
+            },
+            headers={"Authorization": "Bearer sometoken"},
+        )
+
+    assert response.status_code == 201
+
+    # Verify the Notification audit row was written to the DB
+    from sqlalchemy import select
+
+    from models.notification_base import NotificationSchema, NotificationStatus, NotificationType
+
+    result = await db_session.execute(
+        select(NotificationSchema).where(
+            NotificationSchema.type == NotificationType.ENROLLMENT_INVITE
+        )
+    )
+    notif = result.scalar_one_or_none()
+    assert notif is not None, "No ENROLLMENT_INVITE audit row found — route is not calling dispatch"
+    assert notif.status == NotificationStatus.SENT
+    assert notif.type == NotificationType.ENROLLMENT_INVITE
+
+
 async def test_enroll_student_with_null_institute_id_auto_assigns(client):
     """Student created without an institute (institute_id=None) should be auto-assigned
     to the enrolling owner's institute instead of getting a 403."""
