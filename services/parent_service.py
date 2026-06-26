@@ -20,9 +20,22 @@ class ParentService:
         phone: str,
         name: str | None,
     ) -> ParentSchema:
+        # 1. Already-verified parent (by Supabase user_id)
         existing = await self.parent_repo.get_by_user_id(db, user_id)
         if existing:
+            if name and not existing.name:
+                return await self.parent_repo.update_parent(db, existing, {"name": name})
             return existing
+
+        # 2. Owner-created stub (matched by phone, no user_id yet) → claim it
+        stub = await self.parent_repo.get_by_phone(db, phone)
+        if stub:
+            updates: dict = {"user_id": user_id}
+            if name:
+                updates["name"] = name
+            return await self.parent_repo.update_parent(db, stub, updates)
+
+        # 3. Brand-new parent
         parent = ParentSchema(user_id=user_id, phone_number=phone, name=name)
         return await self.parent_repo.create_parent(db, parent)
 

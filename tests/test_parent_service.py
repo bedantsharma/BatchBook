@@ -10,15 +10,18 @@ Covers:
 - update_parent: applies changes; returns None when parent not found
 """
 
+import uuid
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from DTO.student_model import StudentFeesStatus
 from models.parent_base import ParentSchema
 from models.student_base import StudentSchema
-from DTO.student_model import StudentFeesStatus
+from repositories.parent_repository import ParentRepository
 from services.parent_service import ParentService
 
 
@@ -70,6 +73,7 @@ async def test_get_or_create_creates_new_parent_when_not_found(service):
 
     service.parent_repo = MagicMock()
     service.parent_repo.get_by_user_id = AsyncMock(return_value=None)
+    service.parent_repo.get_by_phone = AsyncMock(return_value=None)
     service.parent_repo.create_parent = AsyncMock(return_value=new_parent)
 
     result = await service.get_or_create_after_otp(
@@ -103,6 +107,7 @@ async def test_verify_otp_returns_token_and_children_on_success(service):
 
     service.parent_repo = MagicMock()
     service.parent_repo.get_by_user_id = AsyncMock(return_value=None)
+    service.parent_repo.get_by_phone = AsyncMock(return_value=None)
     service.parent_repo.create_parent = AsyncMock(return_value=parent)
     service.parent_repo.get_students_by_parent_id = AsyncMock(return_value=[child])
 
@@ -214,3 +219,47 @@ async def test_update_parent_returns_none_when_parent_not_found(service):
         db=MagicMock(), user_id=uuid4(), updates={"name": "Ghost"}
     )
     assert result is None
+
+
+# --- TDD tests: stub-claim + name persistence (Task 4) ---
+
+
+@pytest.mark.asyncio
+async def test_claims_stub_by_phone_and_sets_name(db_session: AsyncSession):
+    # Owner-created stub: phone + name, no user_id
+    repo = ParentRepository()
+    stub = ParentSchema(phone_number="9876543210", name="Asha", user_id=None)
+    await repo.create_parent(db_session, stub)
+
+    uid = uuid.uuid4()
+    svc = ParentService()
+    parent = await svc.get_or_create_after_otp(
+        db_session, uid, "9876543210", name="Asha Devi"
+    )
+
+    assert parent.id == stub.id  # same row claimed, not a duplicate
+    assert str(parent.user_id) == str(uid)
+    assert parent.name == "Asha Devi"  # name updated from OTP step
+
+
+@pytest.mark.asyncio
+async def test_creates_new_parent_when_none_exists(db_session: AsyncSession):
+    uid = uuid.uuid4()
+    svc = ParentService()
+    parent = await svc.get_or_create_after_otp(db_session, uid, "9000000000", name="New")
+    assert parent.id is not None
+    assert parent.name == "New"
+
+
+@pytest.mark.asyncio
+async def test_backfills_name_on_existing_verified_parent(db_session: AsyncSession):
+    uid = uuid.uuid4()
+    repo = ParentRepository()
+    existing = ParentSchema(phone_number="9111111111", name=None, user_id=uid)
+    await repo.create_parent(db_session, existing)
+
+    svc = ParentService()
+    parent = await svc.get_or_create_after_otp(
+        db_session, uid, "9111111111", name="Filled"
+    )
+    assert parent.name == "Filled"
