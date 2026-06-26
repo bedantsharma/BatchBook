@@ -163,8 +163,21 @@ async def invite_student(
     # Route the invite send through dispatch so every outcome is audited.
     # ENROLLMENT_INVITE is not a reminder type, so dispatch always attempts the send
     # regardless of parent verification status.
+    #
+    # Safety note: enrollment_repo.create() (called inside invite_student()) already
+    # called db.commit(), so parent/student/enrollment are durably committed before we
+    # reach here.  A dispatch failure therefore cannot roll back the enrollment.
+    # We still wrap dispatch() in try/except so that an audit-write error (e.g. a
+    # transient Notification DB failure) is logged and swallowed — it must never turn
+    # a successful 201 into a 500.
     parent = await ParentRepository().get_by_phone(db, request.parent_phone)
-    if parent is not None:
+    if parent is None:
+        logger.warning(
+            f"[enrollment_invite] parent lookup returned None for phone={request.parent_phone!r} "
+            f"after invite_student — ENROLLMENT_INVITE audit row SKIPPED "
+            f"(student_id={enrollment.student_id})"
+        )
+    else:
         invite_components = [
             {
                 "type": "body",
@@ -175,16 +188,22 @@ async def invite_student(
                 ],
             }
         ]
-        await dispatch(
-            db,
-            parent=parent,
-            student_id=enrollment.student_id,
-            institute_id=institute_id,
-            type=NotificationType.ENROLLMENT_INVITE,
-            template_name="enrollment_invite",
-            components=invite_components,
-            join_url=join_url,
-        )
+        try:
+            await dispatch(
+                db,
+                parent=parent,
+                student_id=enrollment.student_id,
+                institute_id=institute_id,
+                type=NotificationType.ENROLLMENT_INVITE,
+                template_name="enrollment_invite",
+                components=invite_components,
+                join_url=join_url,
+            )
+        except Exception as exc:
+            logger.error(
+                f"[enrollment_invite] dispatch failed (non-fatal — enrollment already committed): "
+                f"parent_id={parent.id} student_id={enrollment.student_id} — {exc}"
+            )
 
     return enrollment
 
