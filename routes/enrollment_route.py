@@ -1,4 +1,3 @@
-from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
@@ -154,8 +153,10 @@ async def invite_student(
         logger.error(e)
         raise HTTPException(status_code=500, detail="Failed to invite student — check logs")
 
+    from urllib.parse import quote
+
     base_url = "https://batchbook.in"
-    join_url = f"{base_url}/join/{join_code}"
+    join_url = f"{base_url}/join/{join_code}?student={quote(request.student_name)}"
     await send_enrollment_invite(
         parent_phone=request.parent_phone,
         student_name=request.student_name,

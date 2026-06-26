@@ -140,6 +140,20 @@ async def send_absence_alert(
         )
 
 
+async def dispatch_in_background(**kwargs) -> None:
+    """Background-task wrapper: opens its own DB session and dispatches.
+
+    Pass the same keyword args as ``dispatch`` minus ``db``.
+    """
+    from db.session import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        try:
+            await dispatch(db, **kwargs)
+        except Exception as exc:  # never let a background failure escape
+            logger.error(f"[WhatsApp] background dispatch failed: {exc}")
+
+
 async def dispatch(
     db: AsyncSession,
     *,
