@@ -7,6 +7,7 @@ from pydantic import BaseModel
 class EnrollmentResponse(BaseModel):
     id: int
     student_id: int
+    student_name: str | None = None
     batch_id: int
     enrolled_at: datetime
     is_active: bool

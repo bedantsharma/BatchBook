@@ -199,8 +199,37 @@ class FeeService:
 
     async def get_batch_fee_records(
         self, db: AsyncSession, batch_id: int, month: date
-    ) -> list[FeeRecordSchema]:
-        return await self.fee_repo.get_records_by_batch_and_month(db, batch_id, month)
+    ) -> list[dict]:
+        """Return fee records for a batch and month, with student_name joined in."""
+        from models.enrollment_base import EnrollmentSchema
+        from models.student_base import StudentSchema
+
+        result = await db.execute(
+            select(FeeRecordSchema, StudentSchema.name)
+            .join(EnrollmentSchema, FeeRecordSchema.enrollment_id == EnrollmentSchema.id)
+            .join(StudentSchema, EnrollmentSchema.student_id == StudentSchema.id)
+            .where(
+                EnrollmentSchema.batch_id == batch_id,
+                FeeRecordSchema.month == month,
+            )
+        )
+        rows = result.all()
+        out = []
+        for record, student_name in rows:
+            out.append({
+                "id": record.id,
+                "enrollment_id": record.enrollment_id,
+                "student_name": student_name,
+                "month": record.month,
+                "amount_due": record.amount_due,
+                "amount_paid": record.amount_paid,
+                "status": record.status,
+                "paid_at": record.paid_at,
+                "payment_reference": record.payment_reference,
+                "payment_link": record.payment_link,
+                "created_at": record.created_at,
+            })
+        return out
 
     async def _create_razorpay_link(self, razorpay_client, data: dict) -> dict:
         """Run the synchronous Razorpay SDK call in a thread pool."""

@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.enrollment_base import EnrollmentSchema
@@ -72,9 +73,28 @@ class EnrollmentService:
 
     async def get_enrollments_by_batch(
         self, db: AsyncSession, batch_id: int
-    ) -> list[EnrollmentSchema]:
-        """Return all enrollments (active + inactive) for a batch."""
-        return await self.enrollment_repo.get_by_batch_id(db, batch_id)
+    ) -> list[dict]:
+        """Return all enrollments (active + inactive) for a batch, with student_name."""
+        result = await db.execute(
+            select(EnrollmentSchema, StudentSchema.name)
+            .join(StudentSchema, EnrollmentSchema.student_id == StudentSchema.id)
+            .where(EnrollmentSchema.batch_id == batch_id)
+        )
+        rows = result.all()
+        out = []
+        for enrollment, student_name in rows:
+            out.append({
+                "id": enrollment.id,
+                "student_id": enrollment.student_id,
+                "student_name": student_name,
+                "batch_id": enrollment.batch_id,
+                "enrolled_at": enrollment.enrolled_at,
+                "is_active": enrollment.is_active,
+                "due_day": enrollment.due_day,
+                "first_month_amount": enrollment.first_month_amount,
+                "created_at": enrollment.created_at,
+            })
+        return out
 
     async def get_active_enrollments_by_batch(
         self, db: AsyncSession, batch_id: int
