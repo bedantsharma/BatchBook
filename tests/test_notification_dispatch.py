@@ -51,6 +51,9 @@ async def test_unverified_reminder_sends_invite_and_logs_skipped(db_session, fak
     assert log.status == NotificationStatus.SKIPPED_UNVERIFIED
     assert log.reason == "parent number not verified"
     assert fake_send[-1]["template_name"] == "enrollment_invite"  # invite sent instead
+    assert log.meta_data["whatsapp_response"] == {"messages": [{"id": "wamid.TEST"}]}
+    assert log.meta_data["institute_id"] == 7
+    assert log.meta_data["message"]  # truthy check
 
 
 @pytest.mark.asyncio
