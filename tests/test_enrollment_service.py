@@ -169,18 +169,23 @@ async def test_enroll_student_stores_first_month_amount():
 
 async def test_get_enrollments_by_batch_returns_all():
     svc = EnrollmentService()
-    db = MagicMock()
 
     e1 = _make_enrollment(enrollment_id=1, is_active=True)
     e2 = _make_enrollment(enrollment_id=2, is_active=False)
 
-    svc.enrollment_repo = MagicMock()
-    svc.enrollment_repo.get_by_batch_id = AsyncMock(return_value=[e1, e2])
+    mock_result = MagicMock()
+    mock_result.all.return_value = [(e1, "Alice"), (e2, "Bob")]
+
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=mock_result)
 
     result = await svc.get_enrollments_by_batch(db=db, batch_id=20)
 
     assert len(result) == 2
-    svc.enrollment_repo.get_by_batch_id.assert_called_once_with(db, 20)
+    assert result[0]["student_name"] == "Alice"
+    assert result[1]["student_name"] == "Bob"
+    assert result[0]["id"] == 1
+    assert result[1]["is_active"] is False
 
 
 async def test_get_active_enrollments_by_batch_filters_inactive():

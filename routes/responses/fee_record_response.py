@@ -9,6 +9,7 @@ from models.fee_record_base import FeeStatus
 class FeeRecordResponse(BaseModel):
     id: int
     enrollment_id: int
+    student_name: str | None = None
     month: date
     amount_due: Decimal
     amount_paid: Decimal
