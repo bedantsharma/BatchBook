@@ -54,6 +54,12 @@ async def send_enrollment_invite(
             template_name="enrollment_invite",
             components=_body(student_name, institute_name, join_url),
         )
+        logger.info(
+            "[WhatsApp] sent template={template} phone=****{phone_suffix} student={student}",
+            template="enrollment_invite",
+            phone_suffix=parent_phone[-4:],
+            student=student_name,
+        )
     except Exception as exc:
         logger.error(
             f"[WhatsApp] enrollment_invite failed for +91{parent_phone} "
@@ -86,6 +92,12 @@ async def send_fee_reminder(
             template_name="fee_reminder",
             components=_body(student_name, amount_str, batch_name, due_date, link_text),
         )
+        logger.info(
+            "[WhatsApp] sent template={template} phone=****{phone_suffix} student={student}",
+            template="fee_reminder",
+            phone_suffix=parent_phone[-4:],
+            student=student_name,
+        )
     except Exception as exc:
         logger.error(
             f"[WhatsApp] fee_reminder failed for +91{parent_phone} "
@@ -110,6 +122,12 @@ async def send_fee_receipt(
             template_name="fee_receipt",
             components=_body(student_name, amount_str, batch_name, paid_on),
         )
+        logger.info(
+            "[WhatsApp] sent template={template} phone=****{phone_suffix} student={student}",
+            template="fee_receipt",
+            phone_suffix=parent_phone[-4:],
+            student=student_name,
+        )
     except Exception as exc:
         logger.error(
             f"[WhatsApp] fee_receipt failed for +91{parent_phone} "
@@ -132,6 +150,12 @@ async def send_absence_alert(
             to=_to(parent_phone),
             template_name="absence_alert",
             components=_body(student_name, batch_name, date),
+        )
+        logger.info(
+            "[WhatsApp] sent template={template} phone=****{phone_suffix} student={student}",
+            template="absence_alert",
+            phone_suffix=parent_phone[-4:],
+            student=student_name,
         )
     except Exception as exc:
         logger.error(
