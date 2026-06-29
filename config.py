@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     database_url: str
     supabase_url: str
     supabase_key: str
+    supabase_jwt_secret: str
     razorpay_key_id: str | None = None
     razorpay_key_secret: str | None = None
     meta_whatsapp_token: str | None = None
