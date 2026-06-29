@@ -38,7 +38,7 @@ Scaling is driven by concurrent user count (active students/teachers at any mome
 ### Milestone 3: 5,000+ Active Users → Render Pro + Supabase Supavisor
 
 **Symptoms:**
-- Connection limit warnings even with 2 Standard instances (each uses `pool_size=20`, so 40 total connections can approach PostgreSQL's 100-connection default).
+- Connection limit warnings even with 2 Standard instances (each uses `pool_size=5` + `max_overflow=10` = 15 max connections, so 30 total across 2 instances — approaching Supabase free-tier Postgres limits).
 - Want deterministic scaling without worry about prepared statement cache conflicts.
 
 **Action:**
