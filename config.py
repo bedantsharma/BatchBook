@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     meta_whatsapp_phone_number_id: str | None = None
     waba_id: str | None = None
     rate_limit_enabled: bool = True
+    db_echo: bool = False
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_pool_recycle: int = 1800
 
 
 @lru_cache
