@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from models.test_score_base import ScoreSchema
-from services.test_score_service import NEEDS_ATTENTION_THRESHOLD, ScoreService
+from services.test_score_service import ScoreService
 
 
 @pytest.fixture

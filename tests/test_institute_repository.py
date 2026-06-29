@@ -6,13 +6,14 @@ Symbols under test:
     create, get_by_owner_id, update
 """
 
+from uuid import uuid4
+
 import pytest
 
 from models.institute_base import InstituteSchema
 from models.owner_base import OwnerSchema
 from repositories.institute_repository import InstituteRepository
 from repositories.owner_repository import OwnerRepository
-from uuid import uuid4
 
 
 @pytest.fixture

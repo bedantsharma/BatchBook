@@ -1,6 +1,5 @@
 import secrets
 import string
-
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession

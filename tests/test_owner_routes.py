@@ -13,7 +13,7 @@ Supabase and OwnerService are mocked so no real network calls are made.
 
 from datetime import date, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest

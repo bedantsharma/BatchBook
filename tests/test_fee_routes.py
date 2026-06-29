@@ -141,7 +141,6 @@ async def test_setup_fee_structure_returns_201(client):
         mock_result.scalar_one_or_none.return_value = batch
 
         with patch("routes.fee_route.AsyncSession") as _:
-            from routes.fee_route import _verify_batch_belongs_to_institute
 
             with patch(
                 "routes.fee_route._verify_batch_belongs_to_institute",

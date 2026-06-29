@@ -15,9 +15,9 @@ from uuid import uuid4
 import pytest
 
 from clients.supabase_client import get_supabase_client
+from DTO.student_model import StudentFeesStatus
 from models.parent_base import ParentSchema
 from models.student_base import StudentSchema
-from DTO.student_model import StudentFeesStatus
 from services.parent_service import ParentService, get_parent_service
 
 

@@ -4,15 +4,11 @@ from datetime import date
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
-import pytest
-
 from models.batch_base import BatchSchema, BatchStatus
 from models.enrollment_base import EnrollmentSchema
 from models.institute_base import InstituteSchema
 from models.owner_base import OwnerSchema
 from models.test_score_base import ScoreSchema
-from services.test_score_service import ScoreService
-
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
