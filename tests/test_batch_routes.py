@@ -20,7 +20,6 @@ from services.batch_service import BatchService, get_batch_service
 from services.institute_service import InstituteService, get_institute_service
 from services.owner_service import OwnerService, get_owner_service
 
-
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 

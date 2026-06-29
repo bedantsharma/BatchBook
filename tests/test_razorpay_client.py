@@ -1,7 +1,8 @@
 """Unit tests for clients/razorpay_client.py."""
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 import clients.razorpay_client as rp_module
 

@@ -14,9 +14,9 @@ from uuid import uuid4
 
 import pytest
 
+from DTO.student_model import StudentFeesStatus
 from models.parent_base import ParentSchema
 from models.student_base import StudentSchema
-from DTO.student_model import StudentFeesStatus
 from repositories.parent_repository import ParentRepository
 
 

@@ -20,7 +20,6 @@ from models.owner_base import OwnerSchema
 from services.institute_service import InstituteService, get_institute_service
 from services.owner_service import OwnerService, get_owner_service
 
-
 # ─── helpers ──────────────────────────────────────────────────────────────────
 
 

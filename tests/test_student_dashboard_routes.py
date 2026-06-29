@@ -5,7 +5,7 @@ All dependencies (Supabase, ParentService, DB) are mocked so no real
 network or database calls are made.
 """
 
-from datetime import date, time, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -14,7 +14,6 @@ import pytest
 
 from app import app
 from clients.supabase_client import get_supabase_client
-from models.attendance_base import AttendanceStatus
 from models.batch_base import BatchSchema, BatchStatus
 from models.class_session_base import ClassSessionSchema
 from models.enrollment_base import EnrollmentSchema
@@ -22,7 +21,6 @@ from models.fee_record_base import FeeRecordSchema, FeeStatus
 from models.parent_base import ParentSchema
 from models.student_base import StudentSchema
 from services.parent_service import ParentService, get_parent_service
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -164,6 +162,7 @@ async def test_attendance_returns_401_without_auth(client, mock_parent_service_u
 async def test_attendance_returns_403_for_wrong_student(client, mock_parent_service):
     svc, parent = mock_parent_service
     from sqlalchemy.ext.asyncio import AsyncSession
+
     from db.session import get_db
 
     # Override DB to return None (student not found for this parent)
@@ -192,8 +191,9 @@ async def test_attendance_returns_422_for_invalid_month(client, mock_parent_serv
     enrollment = _make_enrollment()
     batch = _make_batch()
 
-    from db.session import get_db
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from db.session import get_db
 
     async def mock_db():
         db = MagicMock(spec=AsyncSession)
@@ -219,8 +219,9 @@ async def test_attendance_returns_empty_when_no_enrollments(client, mock_parent_
     svc, parent = mock_parent_service
     student = _make_student()
 
-    from db.session import get_db
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from db.session import get_db
 
     call_count = 0
 
@@ -275,8 +276,9 @@ async def test_fee_returns_422_for_invalid_month(client, mock_parent_service):
     svc, parent = mock_parent_service
     student = _make_student()
 
-    from db.session import get_db
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from db.session import get_db
 
     async def mock_db():
         db = MagicMock(spec=AsyncSession)
@@ -304,8 +306,9 @@ async def test_fee_returns_empty_when_no_enrollments(client, mock_parent_service
     svc, parent = mock_parent_service
     student = _make_student()
 
-    from db.session import get_db
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from db.session import get_db
 
     call_count = 0
 
@@ -358,8 +361,9 @@ async def test_schedule_returns_422_for_invalid_date(client, mock_parent_service
     svc, parent = mock_parent_service
     student = _make_student()
 
-    from db.session import get_db
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from db.session import get_db
 
     async def mock_db():
         db = MagicMock(spec=AsyncSession)
@@ -387,8 +391,9 @@ async def test_schedule_returns_empty_when_no_enrollments(client, mock_parent_se
     svc, parent = mock_parent_service
     student = _make_student()
 
-    from db.session import get_db
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from db.session import get_db
 
     call_count = 0
 
@@ -441,8 +446,9 @@ async def test_upcoming_events_returns_empty_when_no_enrollments(client, mock_pa
     svc, parent = mock_parent_service
     student = _make_student()
 
-    from db.session import get_db
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from db.session import get_db
 
     call_count = 0
 
@@ -483,8 +489,9 @@ async def test_upcoming_events_default_limit_is_10(client, mock_parent_service):
     svc, parent = mock_parent_service
     student = _make_student()
 
-    from db.session import get_db
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from db.session import get_db
 
     call_count = 0
 

@@ -51,6 +51,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY . .
 
 EXPOSE 8000
-# 2 workers; increase to (2 × CPU cores + 1) if on a bigger machine
+# 2 workers on Render Starter (1 vCPU). Bump to 4 on Standard (2 vCPU).
 CMD ["uv", "run", "uvicorn", "app:app", \
      "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

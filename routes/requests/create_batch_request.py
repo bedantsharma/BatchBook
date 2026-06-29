@@ -2,7 +2,6 @@ from datetime import date, time
 
 from pydantic import BaseModel, Field
 
-
 _VALID_DAYS = {"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"}
 
 

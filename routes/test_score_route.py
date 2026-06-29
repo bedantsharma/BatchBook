@@ -9,8 +9,8 @@ from supabase import AsyncClient
 
 from clients.supabase_client import get_supabase_client
 from db.session import get_db
-from models.enrollment_base import EnrollmentSchema
 from models.batch_base import BatchSchema
+from models.enrollment_base import EnrollmentSchema
 from routes.requests.create_test_score_request import CreateTestScoreRequest
 from routes.responses.test_score_response import StudentScoresResponse, TestScoreResponse
 from services.institute_service import InstituteService, get_institute_service

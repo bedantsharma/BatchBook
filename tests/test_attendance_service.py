@@ -10,9 +10,9 @@ from datetime import date, time
 
 import pytest
 
+from models.attendance_base import AttendanceStatus
 from models.batch_base import BatchSchema, BatchStatus
 from models.enrollment_base import EnrollmentSchema
-from models.attendance_base import AttendanceStatus
 from services.attendance_service import AttendanceService
 
 

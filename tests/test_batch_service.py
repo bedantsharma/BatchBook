@@ -15,7 +15,7 @@ Covers:
 """
 
 from datetime import date, datetime, time, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
