@@ -5,7 +5,6 @@ os.environ.setdefault("PROJECT_NAME", "BatchBook-Test")
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
 os.environ.setdefault("SUPABASE_KEY", "test-key")
-os.environ.setdefault("SUPABASE_JWT_SECRET", "test-jwt-secret-for-unit-tests-ok")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 import pytest_asyncio
