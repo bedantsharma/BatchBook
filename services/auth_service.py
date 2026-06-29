@@ -18,5 +18,5 @@ async def get_current_user_id(supabase: AsyncClient, authorization: str) -> UUID
             audience="authenticated",
         )
         return UUID(payload["sub"])
-    except jwt.InvalidTokenError as exc:
+    except (jwt.InvalidTokenError, KeyError) as exc:
         raise HTTPException(status_code=401, detail="Invalid token") from exc
