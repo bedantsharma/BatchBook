@@ -1,3 +1,4 @@
+import enum
 from datetime import date
 from decimal import Decimal
 
@@ -7,6 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.fee_record_base import FeeRecordSchema, FeeStatus
 from models.fee_structure_base import FeeStructureSchema
 from repositories.fee_repository import FeeRepository
+
+
+class PaymentMethod(str, enum.Enum):
+    """Payment method for a generated Razorpay payment link.
+
+    Only UPI is supported today. More methods (CARD, NETBANKING, ...) can be
+    added later without changing generate_payment_link's call signature.
+    """
+
+    UPI = "UPI"
 
 
 class FeeService:
@@ -258,8 +269,15 @@ class FeeService:
         db: AsyncSession,
         record_id: int,
         razorpay_client,
+        payment_method: PaymentMethod | None = PaymentMethod.UPI,
     ) -> dict:
         """Generate a Razorpay payment link for the remaining balance on a FeeRecord.
+
+        payment_method=PaymentMethod.UPI (the default) creates a UPI-only Payment
+        Link — opening it on a phone goes straight to a UPI app picker instead of
+        Razorpay's standard multi-method checkout page. Pass payment_method=None for
+        today's standard link (all payment methods; also the only option that works
+        with a test-mode `rzp_test_` key, since UPI Payment Links require live mode).
 
         Raises:
             ValueError: If the record is not found or is already fully paid.
@@ -282,6 +300,8 @@ class FeeService:
             "description": description,
             "reminder_enable": True,
         }
+        if payment_method == PaymentMethod.UPI:
+            data["upi_link"] = "true"
 
         result = await self._create_razorpay_link(razorpay_client, data)
         payment_link_url = result["short_url"]
