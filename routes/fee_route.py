@@ -10,6 +10,7 @@ from supabase import AsyncClient
 
 from clients.razorpay_client import get_razorpay_client
 from clients.supabase_client import get_supabase_client
+from config import get_settings
 from db.session import get_db
 from models.batch_base import BatchSchema
 from models.enrollment_base import EnrollmentSchema
@@ -500,7 +501,11 @@ async def send_fee_reminder_for_record(
     due_date = f"{enrollment.due_day} {fee_record.month.strftime('%b %Y')}"
 
     inst = await institute_service.institute_repo.get_by_id(db, institute_id)
-    join_url = f"https://batchbook.in/join/{inst.join_code}" if inst and inst.join_code else None
+    join_url = (
+        f"{get_settings().frontend_base_url}/join/{inst.join_code}"
+        if inst and inst.join_code
+        else None
+    )
     link_text = fee_record.payment_link or "Contact your institute"
     amount_str = (
         f"{int(amount_pending):,}"
@@ -559,7 +564,11 @@ async def send_fee_reminders_for_all(
     month_date = _parse_month(month)
 
     inst = await institute_service.institute_repo.get_by_id(db, institute_id)
-    join_url = f"https://batchbook.in/join/{inst.join_code}" if inst and inst.join_code else None
+    join_url = (
+        f"{get_settings().frontend_base_url}/join/{inst.join_code}"
+        if inst and inst.join_code
+        else None
+    )
 
     result = await db.execute(
         select(FeeRecordSchema, EnrollmentSchema, StudentSchema, ParentSchema, BatchSchema)

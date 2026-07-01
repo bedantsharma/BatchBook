@@ -6,7 +6,7 @@ All repository and DB calls are mocked — no DB or network required.
 
 from datetime import date, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -473,6 +473,34 @@ async def test_generate_payment_link_standard_when_payment_method_none():
 
     _, data_sent = svc._create_razorpay_link.call_args.args
     assert "upi_link" not in data_sent
+
+
+async def test_generate_payment_link_includes_callback_url():
+    """callback_url/callback_method route the payer back to the success page."""
+    svc = FeeService()
+    db = MagicMock()
+    razorpay_client = MagicMock()
+
+    record = _make_fee_record(
+        record_id=6,
+        amount_due=Decimal("1500.00"),
+        amount_paid=Decimal("0"),
+        status=FeeStatus.NOT_PAID,
+        month=date(2026, 5, 1),
+    )
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_record_by_id = AsyncMock(return_value=record)
+    svc.fee_repo.update_payment_link = AsyncMock(return_value=record)
+    svc._create_razorpay_link = AsyncMock(return_value={"short_url": "https://rzp.io/i/cb"})
+
+    with patch("services.fee_service.get_settings") as mock_settings:
+        mock_settings.return_value.frontend_base_url = "https://batchbook.in"
+        await svc.generate_payment_link(db=db, record_id=6, razorpay_client=razorpay_client)
+
+    _, data_sent = svc._create_razorpay_link.call_args.args
+    assert data_sent["callback_url"] == "https://batchbook.in/payment-success"
+    assert data_sent["callback_method"] == "get"
 
 
 async def test_generate_payment_link_raises_when_record_not_found():

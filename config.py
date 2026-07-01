@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     razorpay_key_id: str | None = None
     razorpay_key_secret: str | None = None
     razorpay_encryption_key: str | None = None
+    frontend_base_url: str = "https://batchbook.in"
     meta_whatsapp_token: str | None = None
     meta_whatsapp_phone_number_id: str | None = None
     waba_id: str | None = None

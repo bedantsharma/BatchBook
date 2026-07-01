@@ -5,6 +5,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import get_settings
 from models.fee_record_base import FeeRecordSchema, FeeStatus
 from models.fee_structure_base import FeeStructureSchema
 from repositories.fee_repository import FeeRepository
@@ -293,12 +294,15 @@ class FeeService:
         amount_paise = int(amount_pending * 100)
         description = f"Fee payment for {record.month.strftime('%B %Y')}"
 
+        settings = get_settings()
         data = {
             "amount": amount_paise,
             "currency": "INR",
             "accept_partial": False,
             "description": description,
             "reminder_enable": True,
+            "callback_url": f"{settings.frontend_base_url}/payment-success",
+            "callback_method": "get",
         }
         if payment_method == PaymentMethod.UPI:
             data["upi_link"] = "true"
