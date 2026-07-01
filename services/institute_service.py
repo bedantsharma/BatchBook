@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.institute_base import InstituteSchema
+from models.institute_base import InstituteSchema, RazorpayStatus
 from models.owner_base import OwnerSchema
 from repositories.institute_repository import InstituteRepository
 
@@ -87,6 +87,27 @@ class InstituteService:
         institute = await self.institute_repo.get_by_owner_id(db, owner_id)
         if not institute:
             return None
+        return await self.institute_repo.update(db, institute, updates)
+
+    async def connect_razorpay(
+        self, db: AsyncSession, owner_id: int, key_id: str, key_secret: str
+    ) -> InstituteSchema:
+        """Save an owner's own Razorpay Key ID/Secret; encrypts the secret at rest.
+
+        Raises:
+            ValueError: If no institute exists for this owner.
+        """
+        from services.crypto_service import encrypt_secret
+
+        institute = await self.institute_repo.get_by_owner_id(db, owner_id)
+        if not institute:
+            raise ValueError("No institute found for this owner")
+
+        updates = {
+            "razorpay_key_id": key_id,
+            "razorpay_key_secret_encrypted": encrypt_secret(key_secret),
+            "razorpay_status": RazorpayStatus.CONNECTED,
+        }
         return await self.institute_repo.update(db, institute, updates)
 
 

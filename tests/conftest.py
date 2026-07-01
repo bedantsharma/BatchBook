@@ -6,6 +6,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
 os.environ.setdefault("SUPABASE_KEY", "test-key")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+os.environ.setdefault("RAZORPAY_ENCRYPTION_KEY", "T-y7CuMZv82GDX0nnga1eU-Y4mfdPg34fVdzJv1QQ70=")
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient

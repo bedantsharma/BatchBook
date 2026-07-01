@@ -16,8 +16,8 @@ services:
     command: ["sh", "/app/scripts/check_migrations.sh"]
     volumes:
       - .:/app
-      - /app/.venv
-      - /app/batchbookui
+      - backend_venv:/app/.venv          # named vol: reused across rebuilds (no orphans)
+      - backend_ui_mask:/app/batchbookui  # named vol: masks the submodule from backend
     env_file:
       - .env
     environment:
@@ -38,8 +38,8 @@ services:
       - "8000:8000"
     volumes:
       - .:/app                           # live-reload: host source → container
-      - /app/.venv                       # anonymous vol: protect container's .venv
-      - /app/batchbookui                 # don't expose the submodule into backend
+      - backend_venv:/app/.venv          # named vol: protect container's .venv (reused, no orphans)
+      - backend_ui_mask:/app/batchbookui  # named vol: don't expose the submodule into backend
     env_file:
       - .env                             # DATABASE_URL, SUPABASE_URL, SUPABASE_KEY …
     networks:
@@ -62,7 +62,7 @@ services:
       - "5173:5173"
     volumes:
       - ./batchbookui:/app               # live-reload: host source → container
-      - /app/node_modules                # anonymous vol: protect container's node_modules
+      - frontend_node_modules:/app/node_modules  # named vol: protect node_modules (reused, no orphans)
     environment:
       - VITE_API_URL=http://localhost:8000   # frontend calls backend directly in dev
     networks:
@@ -74,3 +74,16 @@ services:
 networks:
   batchbook:
     driver: bridge
+
+# Named volumes are reused across `make down`/`make dev` cycles instead of
+# spawning a fresh anonymous volume each time (which is what silently piled up
+# ~6 GB of orphaned volumes). One copy each, reused forever.
+#
+# ⚠️ Gotcha: a named volume keeps its contents across rebuilds. If you change
+# dependencies (uv add / npm install) and the new image isn't reflected in the
+# container, refresh with `make clean` or `docker compose -f docker-compose.dev.yml down -v`
+# to drop these volumes so they re-init from the rebuilt image.
+volumes:
+  backend_venv:
+  backend_ui_mask:
+  frontend_node_modules:

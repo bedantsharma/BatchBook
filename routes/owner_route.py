@@ -23,10 +23,12 @@ from routes.requests.otp_generate_request import OtpGenerateRequest
 from routes.requests.owner_verify_otp_request import OwnerVerifyOtpRequest
 from routes.requests.refresh_token_request import RefreshTokenRequest
 from routes.requests.update_owner_request import UpdateOwnerRequest
+from routes.requests.update_razorpay_credentials_request import UpdateRazorpayCredentialsRequest
 from routes.responses.institute_qr_response import InstituteQRResponse
 from routes.responses.institute_response import InstituteResponse
 from routes.responses.owner_profile_response import OwnerProfileResponse
 from routes.responses.owner_stats_response import OwnerStatsResponse
+from routes.responses.razorpay_payout_response import RazorpayPayoutResponse
 from routes.responses.verify_owner_response import VerifyOwnerResponse
 from services.institute_service import InstituteService, get_institute_service
 from services.owner_service import OwnerService, get_owner_service
@@ -92,7 +94,9 @@ async def verify_otp(
     except Exception as e:
         logger.error(e)
         raise HTTPException(status_code=500, detail="Internal server error — check logs")
-    return VerifyOwnerResponse(auth_token=access_token, refresh_token=refresh_token, aud=aud, teacher_id=str(teacher_id))
+    return VerifyOwnerResponse(
+        auth_token=access_token, refresh_token=refresh_token, aud=aud, teacher_id=str(teacher_id)
+    )
 
 
 @router.get(
@@ -320,4 +324,65 @@ async def get_institute_qr(
         join_url=join_url,
         institute_name=institute.name,
         owner_phone=owner.phone_number,
+    )
+
+
+# ─── GET/PATCH /owner/institute/payouts ───────────────────────────────────────
+
+
+@router.get(
+    "/institute/payouts",
+    summary="Get the connection status of the owner's Razorpay payout account",
+    response_model=RazorpayPayoutResponse,
+)
+async def get_razorpay_payouts(
+    db: AsyncSession = Depends(get_db),
+    owner_service: OwnerServiceDep = None,
+    institute_service: InstituteServiceDep = None,
+    teacher_id: UUID = Depends(_get_current_teacher_id),
+):
+    owner = await owner_service.get_owner_by_teacher_id(db=db, teacher_id=teacher_id)
+    if not owner:
+        raise HTTPException(status_code=404, detail="Owner record not found")
+    institute = await institute_service.get_institute_by_owner_id(db=db, owner_id=owner.id)
+    if not institute:
+        raise HTTPException(status_code=404, detail="No institute found for this owner")
+
+    return RazorpayPayoutResponse(
+        status=institute.razorpay_status.value,
+        key_id=institute.razorpay_key_id,
+        secret_configured=institute.razorpay_key_secret_encrypted is not None,
+    )
+
+
+@router.patch(
+    "/institute/payouts",
+    summary="Save the owner's own Razorpay Key ID/Secret (encrypted at rest)",
+    response_model=RazorpayPayoutResponse,
+)
+async def update_razorpay_payouts(
+    request: UpdateRazorpayCredentialsRequest,
+    db: AsyncSession = Depends(get_db),
+    owner_service: OwnerServiceDep = None,
+    institute_service: InstituteServiceDep = None,
+    teacher_id: UUID = Depends(_get_current_teacher_id),
+):
+    owner = await owner_service.get_owner_by_teacher_id(db=db, teacher_id=teacher_id)
+    if not owner:
+        raise HTTPException(status_code=404, detail="Owner record not found")
+
+    try:
+        institute = await institute_service.connect_razorpay(
+            db=db,
+            owner_id=owner.id,
+            key_id=request.razorpay_key_id,
+            key_secret=request.razorpay_key_secret,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return RazorpayPayoutResponse(
+        status=institute.razorpay_status.value,
+        key_id=institute.razorpay_key_id,
+        secret_configured=institute.razorpay_key_secret_encrypted is not None,
     )
