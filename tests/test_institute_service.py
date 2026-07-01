@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from models.institute_base import InstituteSchema
+from models.institute_base import InstituteSchema, RazorpayStatus
 from services.institute_service import InstituteService
 
 
@@ -109,3 +109,39 @@ async def test_update_institute_returns_none_when_not_found(service, mock_db):
         result = await service.update_institute(mock_db, owner_id=999, updates={"city": "Delhi"})
 
     assert result is None
+
+
+# --- connect_razorpay ---
+
+async def test_connect_razorpay_encrypts_and_updates(service, mock_db):
+    existing = _make_institute(owner_id=4)
+    updated = _make_institute(owner_id=4)
+    updated.razorpay_key_id = "rzp_live_abc123"
+    updated.razorpay_status = RazorpayStatus.CONNECTED
+    update_mock = AsyncMock(return_value=updated)
+
+    with (
+        patch.object(service.institute_repo, "get_by_owner_id", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "update", new=update_mock),
+    ):
+        result = await service.connect_razorpay(
+            mock_db, owner_id=4, key_id="rzp_live_abc123", key_secret="supersecretvalue"
+        )
+
+    assert result is updated
+    update_mock.assert_called_once()
+    call_args = update_mock.call_args[0]
+    assert call_args[1] is existing
+    updates = call_args[2]
+    assert updates["razorpay_key_id"] == "rzp_live_abc123"
+    assert updates["razorpay_status"] == RazorpayStatus.CONNECTED
+    # secret must never be stored in plaintext
+    assert updates["razorpay_key_secret_encrypted"] != "supersecretvalue"
+
+
+async def test_connect_razorpay_raises_when_no_institute(service, mock_db):
+    with patch.object(service.institute_repo, "get_by_owner_id", new=AsyncMock(return_value=None)):
+        with pytest.raises(ValueError, match="No institute found"):
+            await service.connect_razorpay(
+                mock_db, owner_id=999, key_id="rzp_live_x", key_secret="secretvalue"
+            )
