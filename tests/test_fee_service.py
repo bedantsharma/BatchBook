@@ -12,7 +12,7 @@ import pytest
 
 from models.fee_record_base import FeeRecordSchema, FeeStatus
 from models.fee_structure_base import FeeStructureSchema
-from services.fee_service import FeeService
+from services.fee_service import FeeService, PaymentMethod
 
 
 def _make_structure(structure_id=1, batch_id=10, monthly_amount=Decimal("1500.00")):
@@ -394,6 +394,85 @@ async def test_generate_payment_link_partial_pending_amount():
     # Verify Razorpay received the correct paise amount (₹1000 = 100000 paise)
     _, data_sent = svc._create_razorpay_link.call_args.args
     assert data_sent["amount"] == 100000
+
+
+async def test_generate_payment_link_defaults_to_upi_link():
+    """Without an explicit payment_method, a UPI-only link is created."""
+    svc = FeeService()
+    db = MagicMock()
+    razorpay_client = MagicMock()
+
+    record = _make_fee_record(
+        record_id=3,
+        amount_due=Decimal("1500.00"),
+        amount_paid=Decimal("0"),
+        status=FeeStatus.NOT_PAID,
+        month=date(2026, 5, 1),
+    )
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_record_by_id = AsyncMock(return_value=record)
+    svc.fee_repo.update_payment_link = AsyncMock(return_value=record)
+    svc._create_razorpay_link = AsyncMock(return_value={"short_url": "https://rzp.io/i/upi123"})
+
+    await svc.generate_payment_link(db=db, record_id=3, razorpay_client=razorpay_client)
+
+    _, data_sent = svc._create_razorpay_link.call_args.args
+    assert data_sent["upi_link"] == "true"
+
+
+async def test_generate_payment_link_explicit_upi_link():
+    """payment_method=PaymentMethod.UPI explicitly also creates a UPI-only link."""
+    svc = FeeService()
+    db = MagicMock()
+    razorpay_client = MagicMock()
+
+    record = _make_fee_record(
+        record_id=4,
+        amount_due=Decimal("1500.00"),
+        amount_paid=Decimal("0"),
+        status=FeeStatus.NOT_PAID,
+        month=date(2026, 5, 1),
+    )
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_record_by_id = AsyncMock(return_value=record)
+    svc.fee_repo.update_payment_link = AsyncMock(return_value=record)
+    svc._create_razorpay_link = AsyncMock(return_value={"short_url": "https://rzp.io/i/upi456"})
+
+    await svc.generate_payment_link(
+        db=db, record_id=4, razorpay_client=razorpay_client, payment_method=PaymentMethod.UPI
+    )
+
+    _, data_sent = svc._create_razorpay_link.call_args.args
+    assert data_sent["upi_link"] == "true"
+
+
+async def test_generate_payment_link_standard_when_payment_method_none():
+    """payment_method=None generates today's standard (all-methods) payment link."""
+    svc = FeeService()
+    db = MagicMock()
+    razorpay_client = MagicMock()
+
+    record = _make_fee_record(
+        record_id=5,
+        amount_due=Decimal("1500.00"),
+        amount_paid=Decimal("0"),
+        status=FeeStatus.NOT_PAID,
+        month=date(2026, 5, 1),
+    )
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_record_by_id = AsyncMock(return_value=record)
+    svc.fee_repo.update_payment_link = AsyncMock(return_value=record)
+    svc._create_razorpay_link = AsyncMock(return_value={"short_url": "https://rzp.io/i/standard"})
+
+    await svc.generate_payment_link(
+        db=db, record_id=5, razorpay_client=razorpay_client, payment_method=None
+    )
+
+    _, data_sent = svc._create_razorpay_link.call_args.args
+    assert "upi_link" not in data_sent
 
 
 async def test_generate_payment_link_raises_when_record_not_found():
