@@ -30,6 +30,7 @@ from routes.responses.owner_profile_response import OwnerProfileResponse
 from routes.responses.owner_stats_response import OwnerStatsResponse
 from routes.responses.razorpay_payout_response import RazorpayPayoutResponse
 from routes.responses.verify_owner_response import VerifyOwnerResponse
+from services.crypto_service import EncryptionNotConfigured
 from services.institute_service import InstituteService, get_institute_service
 from services.owner_service import OwnerService, get_owner_service
 
@@ -380,6 +381,8 @@ async def update_razorpay_payouts(
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except EncryptionNotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
     return RazorpayPayoutResponse(
         status=institute.razorpay_status.value,

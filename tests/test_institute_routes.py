@@ -371,3 +371,26 @@ async def test_update_payouts_returns_404_when_no_institute(client):
     )
 
     assert response.status_code == 404
+
+
+async def test_update_payouts_returns_503_when_encryption_not_configured(client):
+    from services.crypto_service import EncryptionNotConfigured
+
+    teacher_id = uuid4()
+    owner = _make_owner(teacher_id)
+
+    _setup_owner_service(client, teacher_id, owner=owner)
+    _setup_institute_service(
+        client,
+        existing=_make_institute(owner_id=owner.id),
+        connect_error=EncryptionNotConfigured("RAZORPAY_ENCRYPTION_KEY not set"),
+    )
+
+    response = await client.patch(
+        "/owner/institute/payouts",
+        json={"razorpay_key_id": "rzp_live_abc", "razorpay_key_secret": "supersecretvalue"},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 503
+    assert "RAZORPAY_ENCRYPTION_KEY" in response.json()["detail"]
