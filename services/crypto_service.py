@@ -15,7 +15,14 @@ def _get_fernet() -> Fernet:
             '`python -c "from cryptography.fernet import Fernet; '
             'print(Fernet.generate_key().decode())"` and add it to .env'
         )
-    return Fernet(settings.razorpay_encryption_key.encode())
+    try:
+        return Fernet(settings.razorpay_encryption_key.encode())
+    except ValueError as e:
+        raise EncryptionNotConfigured(
+            f"RAZORPAY_ENCRYPTION_KEY is invalid ({e}) — regenerate one with "
+            '`python -c "from cryptography.fernet import Fernet; '
+            'print(Fernet.generate_key().decode())"` and add it to .env'
+        ) from e
 
 
 def encrypt_secret(plaintext: str) -> str:
