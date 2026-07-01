@@ -21,5 +21,10 @@ class InstituteSchema(Base):
     join_code = Column(String(8), nullable=False, unique=True, index=True)
     razorpay_key_id = Column(String, nullable=True)
     razorpay_key_secret_encrypted = Column(String, nullable=True)
-    razorpay_status = Column(Enum(RazorpayStatus), nullable=False, default=RazorpayStatus.NOT_CONNECTED)
+    razorpay_status = Column(
+        Enum(RazorpayStatus),
+        nullable=False,
+        default=RazorpayStatus.NOT_CONNECTED,
+        server_default="NOT_CONNECTED",
+    )
     created_at = Column(DateTime, default=datetime.now, nullable=False)
