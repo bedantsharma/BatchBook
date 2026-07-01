@@ -42,13 +42,20 @@ def _make_owner(teacher_id=None) -> OwnerSchema:
     return owner
 
 
-def _make_institute(owner_id: int = 1) -> InstituteSchema:
+def _make_institute(
+    owner_id: int = 1, razorpay_status="NOT_CONNECTED", razorpay_key_id=None
+) -> InstituteSchema:
+    from models.institute_base import RazorpayStatus
+
     inst = MagicMock(spec=InstituteSchema)
     inst.id = 10
     inst.owner_id = owner_id
     inst.name = "Sharma Classes"
     inst.city = "Gurugram"
     inst.created_at = datetime(2026, 5, 1)
+    inst.razorpay_status = RazorpayStatus(razorpay_status)
+    inst.razorpay_key_id = razorpay_key_id
+    inst.razorpay_key_secret_encrypted = "encrypted-blob" if razorpay_key_id else None
     return inst
 
 
@@ -77,7 +84,9 @@ def _setup_owner_service(client, teacher_id, owner=None, update_result=None):
     return mock_svc
 
 
-def _setup_institute_service(client, existing=None, created=None, updated=None):
+def _setup_institute_service(
+    client, existing=None, created=None, updated=None, connected=None, connect_error=None
+):
     """Wire an InstituteService mock."""
     mock_svc = MagicMock(spec=InstituteService)
     mock_svc.get_institute_by_owner_id = AsyncMock(return_value=existing)
@@ -85,6 +94,10 @@ def _setup_institute_service(client, existing=None, created=None, updated=None):
         mock_svc.create_institute = AsyncMock(return_value=created)
     if updated is not None:
         mock_svc.update_institute = AsyncMock(return_value=updated)
+    if connect_error is not None:
+        mock_svc.connect_razorpay = AsyncMock(side_effect=connect_error)
+    elif connected is not None:
+        mock_svc.connect_razorpay = AsyncMock(return_value=connected)
     from app import app
 
     app.dependency_overrides[get_institute_service] = lambda: mock_svc
@@ -258,3 +271,103 @@ async def test_get_institute_returns_401_without_auth(client):
     )
 
     assert response.status_code == 401
+
+
+# ─── GET /owner/institute/payouts ─────────────────────────────────────────────
+
+
+async def test_get_payouts_returns_not_connected_by_default(client):
+    teacher_id = uuid4()
+    owner = _make_owner(teacher_id)
+    institute = _make_institute(owner_id=owner.id)
+
+    _setup_owner_service(client, teacher_id, owner=owner)
+    _setup_institute_service(client, existing=institute)
+
+    response = await client.get(
+        "/owner/institute/payouts",
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "NOT_CONNECTED"
+    assert body["key_id"] is None
+    assert body["secret_configured"] is False
+
+
+async def test_get_payouts_returns_404_when_no_institute(client):
+    teacher_id = uuid4()
+    owner = _make_owner(teacher_id)
+
+    _setup_owner_service(client, teacher_id, owner=owner)
+    _setup_institute_service(client, existing=None)
+
+    response = await client.get(
+        "/owner/institute/payouts",
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 404
+
+
+# ─── PATCH /owner/institute/payouts ────────────────────────────────────────────
+
+
+async def test_update_payouts_returns_connected_status(client):
+    teacher_id = uuid4()
+    owner = _make_owner(teacher_id)
+    institute = _make_institute(owner_id=owner.id)
+    connected = _make_institute(
+        owner_id=owner.id, razorpay_status="CONNECTED", razorpay_key_id="rzp_live_abc"
+    )
+
+    _setup_owner_service(client, teacher_id, owner=owner)
+    _setup_institute_service(client, existing=institute, connected=connected)
+
+    response = await client.patch(
+        "/owner/institute/payouts",
+        json={"razorpay_key_id": "rzp_live_abc", "razorpay_key_secret": "supersecretvalue"},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "CONNECTED"
+    assert body["key_id"] == "rzp_live_abc"
+    assert body["secret_configured"] is True
+    assert "razorpay_key_secret" not in body
+
+
+async def test_update_payouts_rejects_empty_key_id(client):
+    teacher_id = uuid4()
+    owner = _make_owner(teacher_id)
+
+    _setup_owner_service(client, teacher_id, owner=owner)
+    _setup_institute_service(client, existing=_make_institute(owner_id=owner.id))
+
+    response = await client.patch(
+        "/owner/institute/payouts",
+        json={"razorpay_key_id": "", "razorpay_key_secret": "supersecretvalue"},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 422
+
+
+async def test_update_payouts_returns_404_when_no_institute(client):
+    teacher_id = uuid4()
+    owner = _make_owner(teacher_id)
+
+    _setup_owner_service(client, teacher_id, owner=owner)
+    _setup_institute_service(
+        client, existing=None, connect_error=ValueError("No institute found for this owner")
+    )
+
+    response = await client.patch(
+        "/owner/institute/payouts",
+        json={"razorpay_key_id": "rzp_live_abc", "razorpay_key_secret": "supersecretvalue"},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 404
