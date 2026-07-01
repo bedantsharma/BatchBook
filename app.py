@@ -89,6 +89,7 @@ app.add_middleware(
         "https://batchbookui.vercel.app",
         "https://batchbook.in",
         "https://www.batchbook.in",
+        "http://localhost:8081"
     ],
     allow_credentials=True,
     allow_methods=["*"],

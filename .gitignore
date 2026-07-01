@@ -20,4 +20,5 @@ wheels/
 node_modules/
 test-results/
 playwright-report/
+.playwright-mcp/
 BATCHBOOK_ROADMAP.md
