@@ -1,3 +1,4 @@
+import hmac
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -22,7 +23,7 @@ async def _verify_admin_secret(x_admin_secret: Annotated[str | None, Header()] =
             status_code=503,
             detail="Admin backfill endpoint not configured — set ADMIN_BACKFILL_SECRET in .env",
         )
-    if x_admin_secret != settings.admin_backfill_secret:
+    if not x_admin_secret or not hmac.compare_digest(x_admin_secret, settings.admin_backfill_secret):
         raise HTTPException(status_code=401, detail="Invalid or missing X-Admin-Secret header")
 
 
