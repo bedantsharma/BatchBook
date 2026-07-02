@@ -24,6 +24,7 @@ from routes.student_dashboard_route import router as student_dashboard_router
 from routes.student_route import router as student_router
 from routes.teacher_route import router as teacher_router
 from routes.test_score_route import router as test_score_router
+from scheduler import shutdown_scheduler, start_scheduler
 
 
 @asynccontextmanager
@@ -31,7 +32,11 @@ async def lifespan(app: FastAPI):
     supabase_client.supabase = await create_client(
         get_settings().supabase_url, get_settings().supabase_key
     )
+    if get_settings().enable_scheduler:
+        start_scheduler()
     yield
+    if get_settings().enable_scheduler:
+        shutdown_scheduler()
 
 
 app = FastAPI(

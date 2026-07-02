@@ -7,6 +7,7 @@ os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
 os.environ.setdefault("SUPABASE_KEY", "test-key")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("RAZORPAY_ENCRYPTION_KEY", "T-y7CuMZv82GDX0nnga1eU-Y4mfdPg34fVdzJv1QQ70=")
+os.environ.setdefault("ENABLE_SCHEDULER", "false")
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
