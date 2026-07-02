@@ -1,7 +1,9 @@
 import enum
-from datetime import date
+from collections import defaultdict
+from datetime import date, timedelta
 from decimal import Decimal
 
+from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +21,12 @@ class PaymentMethod(str, enum.Enum):
     """
 
     UPI = "UPI"
+
+
+def _first_of_last_month() -> date:
+    today = date.today()
+    first_of_this_month = today.replace(day=1)
+    return (first_of_this_month - timedelta(days=1)).replace(day=1)
 
 
 class FeeService:
@@ -318,6 +326,62 @@ class FeeService:
             "amount_pending": amount_pending,
             "month": record.month,
         }
+
+    async def backfill_missing_payment_links(
+        self,
+        db: AsyncSession,
+        institute_id: int | None = None,
+        month: date | None = None,
+    ) -> dict:
+        """Generate payment links for last month's fee records that don't have one yet.
+
+        Only institutes with a connected Razorpay account are eligible — others are
+        counted under skipped_no_razorpay. A failure generating one record's link is
+        logged and counted under failed; it does not stop the rest of the batch.
+        """
+        from clients.razorpay_client import build_institute_razorpay_client
+
+        if month is None:
+            month = _first_of_last_month()
+
+        rows = await self.fee_repo.get_records_missing_payment_link_for_month(
+            db, month, institute_id
+        )
+
+        by_institute = defaultdict(list)
+        institutes_by_id = {}
+        for record, institute in rows:
+            by_institute[institute.id].append(record)
+            institutes_by_id[institute.id] = institute
+
+        summary = {
+            "month": month,
+            "checked": len(rows),
+            "generated": 0,
+            "skipped_no_razorpay": 0,
+            "failed": 0,
+            "errors": [],
+        }
+
+        for inst_id, records in by_institute.items():
+            institute = institutes_by_id[inst_id]
+            razorpay_client = build_institute_razorpay_client(institute)
+            if razorpay_client is None:
+                summary["skipped_no_razorpay"] += len(records)
+                continue
+
+            for record in records:
+                try:
+                    await self.generate_payment_link(
+                        db=db, record_id=record.id, razorpay_client=razorpay_client
+                    )
+                    summary["generated"] += 1
+                except Exception as e:
+                    logger.error(f"Failed to backfill payment link for FeeRecord {record.id}: {e}")
+                    summary["failed"] += 1
+                    summary["errors"].append({"record_id": record.id, "error": str(e)})
+
+        return summary
 
 
 def get_fee_service() -> FeeService:

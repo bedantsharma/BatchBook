@@ -4,7 +4,7 @@ Unit tests for services/fee_service.py.
 All repository and DB calls are mocked — no DB or network required.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -531,3 +531,125 @@ async def test_generate_payment_link_raises_when_already_fully_paid():
 
     with pytest.raises(ValueError, match="already fully paid"):
         await svc.generate_payment_link(db=db, record_id=1, razorpay_client=razorpay_client)
+
+
+# ---------------------------------------------------------------------------
+# backfill_missing_payment_links
+# ---------------------------------------------------------------------------
+
+
+def _make_backfill_institute(institute_id=10, status=None):
+    from models.institute_base import InstituteSchema, RazorpayStatus
+
+    i = MagicMock(spec=InstituteSchema)
+    i.id = institute_id
+    i.razorpay_status = status or RazorpayStatus.CONNECTED
+    i.razorpay_key_id = "rzp_live_abc"
+    i.razorpay_key_secret_encrypted = "enc-blob"
+    return i
+
+
+async def test_backfill_generates_links_for_connected_institute():
+    svc = FeeService()
+    db = MagicMock()
+
+    institute = _make_backfill_institute()
+    record1 = _make_fee_record(record_id=1)
+    record2 = _make_fee_record(record_id=2)
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_records_missing_payment_link_for_month = AsyncMock(
+        return_value=[(record1, institute), (record2, institute)]
+    )
+    svc.generate_payment_link = AsyncMock(return_value={})
+
+    with patch("clients.razorpay_client.build_institute_razorpay_client", return_value=MagicMock()):
+        summary = await svc.backfill_missing_payment_links(
+            db=db, institute_id=None, month=date(2026, 6, 1)
+        )
+
+    assert summary["checked"] == 2
+    assert summary["generated"] == 2
+    assert summary["skipped_no_razorpay"] == 0
+    assert summary["failed"] == 0
+    assert svc.generate_payment_link.call_count == 2
+
+
+async def test_backfill_skips_institutes_without_razorpay_connected():
+    svc = FeeService()
+    db = MagicMock()
+
+    institute = _make_backfill_institute()
+    record1 = _make_fee_record(record_id=1)
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_records_missing_payment_link_for_month = AsyncMock(
+        return_value=[(record1, institute)]
+    )
+    svc.generate_payment_link = AsyncMock()
+
+    with patch("clients.razorpay_client.build_institute_razorpay_client", return_value=None):
+        summary = await svc.backfill_missing_payment_links(
+            db=db, institute_id=None, month=date(2026, 6, 1)
+        )
+
+    assert summary["skipped_no_razorpay"] == 1
+    assert summary["generated"] == 0
+    svc.generate_payment_link.assert_not_called()
+
+
+async def test_backfill_counts_failures_without_stopping_the_batch():
+    svc = FeeService()
+    db = MagicMock()
+
+    institute = _make_backfill_institute()
+    record1 = _make_fee_record(record_id=1)
+    record2 = _make_fee_record(record_id=2)
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_records_missing_payment_link_for_month = AsyncMock(
+        return_value=[(record1, institute), (record2, institute)]
+    )
+    svc.generate_payment_link = AsyncMock(side_effect=[RuntimeError("razorpay down"), {}])
+
+    with patch("clients.razorpay_client.build_institute_razorpay_client", return_value=MagicMock()):
+        summary = await svc.backfill_missing_payment_links(
+            db=db, institute_id=None, month=date(2026, 6, 1)
+        )
+
+    assert summary["failed"] == 1
+    assert summary["generated"] == 1
+    assert summary["errors"] == [{"record_id": 1, "error": "razorpay down"}]
+
+
+async def test_backfill_defaults_month_to_last_calendar_month():
+    svc = FeeService()
+    db = MagicMock()
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_records_missing_payment_link_for_month = AsyncMock(return_value=[])
+
+    today = date.today()
+    first_of_this_month = today.replace(day=1)
+    expected_month = (first_of_this_month - timedelta(days=1)).replace(day=1)
+
+    summary = await svc.backfill_missing_payment_links(db=db, institute_id=None, month=None)
+
+    svc.fee_repo.get_records_missing_payment_link_for_month.assert_called_once_with(
+        db, expected_month, None
+    )
+    assert summary["month"] == expected_month
+
+
+async def test_backfill_passes_institute_id_filter_through():
+    svc = FeeService()
+    db = MagicMock()
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_records_missing_payment_link_for_month = AsyncMock(return_value=[])
+
+    await svc.backfill_missing_payment_links(db=db, institute_id=42, month=date(2026, 6, 1))
+
+    svc.fee_repo.get_records_missing_payment_link_for_month.assert_called_once_with(
+        db, date(2026, 6, 1), 42
+    )
