@@ -13,6 +13,7 @@ from supabase._async.client import create_client
 from clients import supabase_client
 from config import get_settings
 from rate_limiter import limiter
+from routes.admin_route import router as admin_router
 from routes.attendance_route import router as attendance_router
 from routes.batch_route import router as batch_router
 from routes.enrollment_route import router as enrollment_router
@@ -106,4 +107,5 @@ app.include_router(router=batch_router)
 app.include_router(router=enrollment_router)
 app.include_router(router=fee_router)
 app.include_router(router=attendance_router)
+app.include_router(router=admin_router)
 app.include_router(router=test_score_router)
