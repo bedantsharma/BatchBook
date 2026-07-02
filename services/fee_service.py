@@ -365,7 +365,17 @@ class FeeService:
 
         for inst_id, records in by_institute.items():
             institute = institutes_by_id[inst_id]
-            razorpay_client = build_institute_razorpay_client(institute)
+            try:
+                razorpay_client = build_institute_razorpay_client(institute)
+            except Exception as e:
+                logger.error(
+                    f"Failed to build Razorpay client for institute {inst_id}: {e}"
+                )
+                summary["skipped_no_razorpay"] += len(records)
+                for record in records:
+                    summary["errors"].append({"record_id": record.id, "error": str(e)})
+                continue
+
             if razorpay_client is None:
                 summary["skipped_no_razorpay"] += len(records)
                 continue

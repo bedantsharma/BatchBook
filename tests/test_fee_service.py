@@ -598,6 +598,38 @@ async def test_backfill_skips_institutes_without_razorpay_connected():
     svc.generate_payment_link.assert_not_called()
 
 
+async def test_backfill_isolates_client_build_failure_to_one_institute():
+    """A broken Razorpay client for one institute must not abort the whole batch."""
+    svc = FeeService()
+    db = MagicMock()
+
+    broken_institute = _make_backfill_institute(institute_id=10)
+    healthy_institute = _make_backfill_institute(institute_id=20)
+    broken_record = _make_fee_record(record_id=1)
+    healthy_record = _make_fee_record(record_id=2)
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_records_missing_payment_link_for_month = AsyncMock(
+        return_value=[(broken_record, broken_institute), (healthy_record, healthy_institute)]
+    )
+    svc.generate_payment_link = AsyncMock(return_value={})
+
+    with patch(
+        "clients.razorpay_client.build_institute_razorpay_client",
+        side_effect=[ValueError("Could not decrypt stored secret — key may have changed"), MagicMock()],
+    ):
+        summary = await svc.backfill_missing_payment_links(
+            db=db, institute_id=None, month=date(2026, 6, 1)
+        )
+
+    assert summary["skipped_no_razorpay"] == 1
+    assert summary["generated"] == 1
+    assert summary["errors"] == [
+        {"record_id": 1, "error": "Could not decrypt stored secret — key may have changed"}
+    ]
+    svc.generate_payment_link.assert_called_once()
+
+
 async def test_backfill_counts_failures_without_stopping_the_batch():
     svc = FeeService()
     db = MagicMock()
