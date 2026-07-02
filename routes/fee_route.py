@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase import AsyncClient
 
-from clients.razorpay_client import get_razorpay_client
+from clients.razorpay_client import build_institute_razorpay_client
 from clients.supabase_client import get_supabase_client
 from config import get_settings
 from db.session import get_db
@@ -411,8 +411,15 @@ async def get_payment_link(
 
     await _verify_batch_belongs_to_institute(db, enrollment.batch_id, institute_id)
 
+    institute = await institute_service.institute_repo.get_by_id(db, institute_id)
+    razorpay_client = build_institute_razorpay_client(institute) if institute else None
+    if razorpay_client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Razorpay not connected for this institute — connect it in Owner → Payouts first",
+        )
+
     try:
-        razorpay_client = get_razorpay_client()
         result = await fee_service.generate_payment_link(
             db=db,
             record_id=record_id,
@@ -420,8 +427,6 @@ async def get_payment_link(
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error(e)
         raise HTTPException(
