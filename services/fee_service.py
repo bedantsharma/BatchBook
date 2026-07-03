@@ -3,6 +3,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
 
+from fastapi import BackgroundTasks
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -144,6 +145,52 @@ class FeeService:
             raise ValueError("amount_paid cannot be negative")
 
         return await self.fee_repo.update_payment(db, record, amount_paid, reference)
+
+    async def get_record_by_payment_link(
+        self, db: AsyncSession, payment_link: str
+    ) -> FeeRecordSchema | None:
+        return await self.fee_repo.get_record_by_payment_link(db, payment_link)
+
+    async def notify_fee_receipt_if_fully_paid(
+        self, db: AsyncSession, background_tasks: BackgroundTasks, record: FeeRecordSchema
+    ) -> None:
+        """If `record` is now FULLY_PAID, queue a fee_receipt WhatsApp send.
+
+        Best-effort: any failure to resolve student/parent/batch or queue the
+        background task is logged and swallowed rather than raised, so a
+        notification problem never fails the caller's payment-confirmation flow.
+        """
+        if record.status != FeeStatus.FULLY_PAID:
+            return
+
+        from models.batch_base import BatchSchema
+        from models.enrollment_base import EnrollmentSchema
+        from models.parent_base import ParentSchema
+        from models.student_base import StudentSchema
+        from services.notification_service import send_fee_receipt
+
+        try:
+            result = await db.execute(
+                select(StudentSchema, ParentSchema, BatchSchema)
+                .join(EnrollmentSchema, EnrollmentSchema.student_id == StudentSchema.id)
+                .join(ParentSchema, StudentSchema.parent_id == ParentSchema.id, isouter=True)
+                .join(BatchSchema, BatchSchema.id == EnrollmentSchema.batch_id)
+                .where(EnrollmentSchema.id == record.enrollment_id)
+            )
+            row = result.first()
+            if row:
+                student, parent, batch = row
+                if parent and parent.phone_number:
+                    background_tasks.add_task(
+                        send_fee_receipt,
+                        parent_phone=parent.phone_number,
+                        student_name=student.name or "Student",
+                        amount=float(record.amount_paid),
+                        batch_name=batch.name,
+                        paid_on=record.paid_at.strftime("%d %b %Y") if record.paid_at else "",
+                    )
+        except Exception as e:
+            logger.error(f"Failed to queue fee receipt notification: {e}")
 
     async def get_fee_dashboard(
         self,

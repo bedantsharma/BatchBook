@@ -50,7 +50,7 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 | Gap | Severity | Blocks |
 |-----|----------|--------|
 | All institutes' fee payments settle into the platform's own Razorpay account, not the owner's | 🟢 FIXED — Task F.3, [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge | Was: onboarding any real second paying owner; regulatory exposure (RBI Payment Aggregator rules) |
-| No Razorpay webhook handler — payment status is 100% manual via `PATCH /fee/record/{id}/pay` | 🔴 CRITICAL | Reliable fee status, auto `fee_receipt` WATI send (Task D.2) |
+| No Razorpay webhook handler — payment status is 100% manual via `PATCH /fee/record/{id}/pay` | 🟢 FIXED — Task F.4, code-complete 2026-07-03, not yet a PR or smoke-tested | Was: reliable fee status, auto `fee_receipt` WATI send (Task D.2) |
 | No CI/CD pipeline | 🟡 HIGH | Safe deployments |
 | Owner header stats not wired | 🟡 HIGH | UX completeness |
 | Student Batches/Schedule/Fees tabs greyed out | 🟡 HIGH | Student app completeness |
@@ -73,7 +73,7 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 | **B** | Landing page (real marketing page + WATI website URL) | ✅ DONE — deployed at batchbookui.vercel.app |
 | **C** | Deployment — hosting, domain, SSL, CI/CD | 🟡 PARTIAL — C.1 ✅ C.2 ✅ C.3 ✅ C.4 ✅ · C.5 (smoke test) remaining |
 | **D** | WhatsApp notifications via Meta Cloud API direct (fee reminders, absence alerts) | ✅ DONE — D.0 ✅ D.1 ✅ D.2 ✅ D.3 ✅ · PRs open: BatchBook #33 + batchbookui #26 |
-| **F** | Multi-tenant payments — owner brings their own Razorpay account (BYO keys) + per-tenant webhooks | 🟡 IN PROGRESS — F.1 ✅ F.2 ✅ F.3 ✅ F.3b ✅ (F.3/F.3b: [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge; F.2 key-prefix/liveness validation code-complete, not yet a PR) · F.4–F.7 remaining |
+| **F** | Multi-tenant payments — owner brings their own Razorpay account (BYO keys) + per-tenant webhooks | 🟡 IN PROGRESS — F.1 ✅ F.2 ✅ F.3 ✅ F.3b ✅ F.4 ✅ (F.3/F.3b: [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge; F.2 and F.4 code-complete, not yet a PR) · F.5–F.7 remaining |
 | **E** | Polish — multi-child, streak, receipts, E2E CI | ⬜ NOT-STARTED |
 | **S** | Pre-scaling hardening — local JWT verify, connection pooling, prod DB config, Render redundancy | 🟡 PARTIAL — S.1 ✅ S.3 ✅ S.5 ✅ · S.2 pool config ✅ Supavisor switch future · S.4 docs ✅ 2nd instance future |
 
@@ -82,7 +82,7 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 - Phase B second: landing page serves double duty — WATI needs a URL, owners need a place to find you
 - Phase C third: now you have something worth deploying
 - Phase D next up: Meta verification is approved, no external dependency left — implement whenever convenient
-- **Phase F before onboarding any second real paying owner** — F.1–F.3b are code-complete ([PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge), closing the "money settles into your account, not theirs" gap; F.4 (webhook-based payment confirmation) and F.6 (subscription billing) remain before this is fully done.
+- **Phase F before onboarding any second real paying owner** — F.1–F.4 are code-complete ([PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge for F.3/F.3b; F.2 and F.4 not yet a PR), closing the "money settles into your account, not theirs" gap and adding automatic webhook-based payment confirmation; F.5 (key rotation detection) and F.6 (subscription billing) remain before this is fully done.
 - Phase E ongoing: polish after real users give feedback
 
 ---
@@ -385,7 +385,7 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
 
 ---
 
-## PHASE F — Multi-Tenant Payment Settlement (Bring-Your-Own Razorpay Account) 🟡 IN PROGRESS (F.1–F.3b built, F.4–F.7 remaining)
+## PHASE F — Multi-Tenant Payment Settlement (Bring-Your-Own Razorpay Account) 🟡 IN PROGRESS (F.1–F.4 built, F.5–F.7 remaining)
 
 **Why this phase exists:** `clients/razorpay_client.py` builds one global `razorpay.Client` from your personal `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`, and `fee_service.py: generate_payment_link()` uses that same client for every institute's fee records. **Every parent payment, for every owner, currently settles into your own Razorpay account, not the owner's.** Fine for a single pilot institute (yours); breaks the moment a second real owner signs up — you'd be holding other people's tuition money and manually forwarding it, which is an operational headache and a real regulatory question under RBI's Payment Aggregator (PA-PG) rules.
 
@@ -473,17 +473,21 @@ Open questions from the decision doc are now resolved:
 
 ---
 
-### Task F.4 — Per-institute Razorpay payment webhook handling
+### Task F.4 — Per-institute Razorpay payment webhook handling ✅ DONE (pending PR + smoke test)
 
 **Why:** Payment confirmation is currently 100% manual. A webhook makes the fee status update itself the moment Razorpay confirms payment, and unblocks the auto fee-receipt WhatsApp send already planned in Task D.2. Each owner's Razorpay account has its own webhook secret, so the single global `RAZORPAY_WEBHOOK_SECRET` assumption from the old Route plan no longer holds.
 
-- [ ] Add nullable `razorpay_webhook_secret` (encrypted) column to `InstituteSchema`; owner registers BatchBook's webhook URL in their own Razorpay dashboard and pastes the secret back into Settings
-- [ ] Add `POST /webhooks/razorpay/{institute_id}` route (no JWT auth — verified by signature instead), keyed per institute so the right stored secret is used for verification
-- [ ] Verify the `X-Razorpay-Signature` header against the raw request body using `razorpay_client.utility.verify_webhook_signature()` and that institute's stored secret
-- [ ] Handle the `payment_link.paid` event: look up the `FeeRecord` by its stored `payment_link`/reference, then call the existing `fee_service.mark_payment()` logic automatically with the captured amount and Razorpay `payment.id` as the reference
-- [ ] Keep `PATCH /fee/record/{id}/pay` as-is for manual/offline (cash) payments — don't remove it
+- [x] Added nullable `razorpay_webhook_secret_encrypted` column to `InstituteSchema` (migration `a24386059615`); `PATCH /owner/institute/payouts/webhook` saves the secret the owner pastes in after registering BatchBook's webhook URL in their own Razorpay dashboard — `InstituteService.set_webhook_secret()`. `RazorpayPayoutResponse` now also returns `webhook_configured`
+- [x] Added `POST /webhooks/razorpay/{institute_id}` in `routes/webhook_route.py` (no JWT auth — verified by signature instead), keyed per institute so the right stored secret is used for verification
+- [x] Verifies the `X-Razorpay-Signature` header against the raw request body using `razorpay.Utility().verify_webhook_signature()` and that institute's decrypted stored secret; invalid/missing signature → `400`, no webhook configured for that institute → `404`
+- [x] Handles the `payment_link.paid` event: looks up the `FeeRecord` by its stored `payment_link` (short_url) via `FeeRepository.get_record_by_payment_link()`, adds the webhook's `amount_paid` (paise) to the record's existing `amount_paid`, then calls `fee_service.mark_payment()` with Razorpay's `payment.id` as the reference. Already-`FULLY_PAID` records short-circuit as a no-op so a retried webhook delivery can't double-count. Unrecognized events and unmatched payment links are acknowledged (`200`) but ignored so Razorpay doesn't retry forever
+- [x] Refactored the fee-receipt WhatsApp send (previously inlined in the manual `PATCH /fee/record/{id}/pay` route) into `FeeService.notify_fee_receipt_if_fully_paid()`, shared by both the manual endpoint and the new webhook — this is what actually "unblocks" the auto-receipt-on-real-payment flow the Why note above refers to
+- [x] `PATCH /fee/record/{id}/pay` is unchanged for manual/offline (cash) payments — still works exactly as before
+- [x] 26 new/updated tests (webhook signature/event handling, idempotency, partial + full payment amounts, institute/fee service unit tests) — 349/349 backend tests passing
 
-**Verified by:** _(pending)_
+**Not built:** no frontend UI yet for the owner to see/paste the webhook secret in Settings → Payouts (F.1's Payouts page only has Key ID/Secret fields today) — needed before an owner can actually turn this on
+
+**Verified by:** _(code-complete 2026-07-03, not yet a PR; no manual smoke test against a real Razorpay test-mode webhook yet)_
 
 ---
 

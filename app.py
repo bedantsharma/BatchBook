@@ -24,6 +24,7 @@ from routes.student_dashboard_route import router as student_dashboard_router
 from routes.student_route import router as student_router
 from routes.teacher_route import router as teacher_router
 from routes.test_score_route import router as test_score_router
+from routes.webhook_route import router as webhook_router
 from scheduler import shutdown_scheduler, start_scheduler
 
 
@@ -114,3 +115,4 @@ app.include_router(router=fee_router)
 app.include_router(router=attendance_router)
 app.include_router(router=admin_router)
 app.include_router(router=test_score_router)
+app.include_router(router=webhook_router)

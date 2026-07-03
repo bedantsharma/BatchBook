@@ -22,6 +22,7 @@ from routes.requests.create_institute_request import CreateInstituteRequest
 from routes.requests.otp_generate_request import OtpGenerateRequest
 from routes.requests.owner_verify_otp_request import OwnerVerifyOtpRequest
 from routes.requests.refresh_token_request import RefreshTokenRequest
+from routes.requests.set_razorpay_webhook_secret_request import SetRazorpayWebhookSecretRequest
 from routes.requests.update_owner_request import UpdateOwnerRequest
 from routes.requests.update_razorpay_credentials_request import UpdateRazorpayCredentialsRequest
 from routes.responses.institute_qr_response import InstituteQRResponse
@@ -357,6 +358,7 @@ async def get_razorpay_payouts(
         status=institute.razorpay_status.value,
         key_id=institute.razorpay_key_id,
         secret_configured=institute.razorpay_key_secret_encrypted is not None,
+        webhook_configured=institute.razorpay_webhook_secret_encrypted is not None,
     )
 
 
@@ -394,4 +396,45 @@ async def update_razorpay_payouts(
         status=institute.razorpay_status.value,
         key_id=institute.razorpay_key_id,
         secret_configured=institute.razorpay_key_secret_encrypted is not None,
+        webhook_configured=institute.razorpay_webhook_secret_encrypted is not None,
+    )
+
+
+@router.patch(
+    "/institute/payouts/webhook",
+    summary="Save the webhook secret for the owner's Razorpay payout account (encrypted at rest)",
+    response_model=RazorpayPayoutResponse,
+)
+async def update_razorpay_webhook_secret(
+    request: SetRazorpayWebhookSecretRequest,
+    db: AsyncSession = Depends(get_db),
+    owner_service: OwnerServiceDep = None,
+    institute_service: InstituteServiceDep = None,
+    teacher_id: UUID = Depends(_get_current_teacher_id),
+):
+    """Save the secret generated when the owner registers BatchBook's webhook URL
+    (``POST /webhooks/razorpay/{institute_id}``) in their own Razorpay dashboard
+    under Settings > Webhooks. Used to verify the X-Razorpay-Signature header on
+    incoming webhook calls for this institute.
+    """
+    owner = await owner_service.get_owner_by_teacher_id(db=db, teacher_id=teacher_id)
+    if not owner:
+        raise HTTPException(status_code=404, detail="Owner record not found")
+
+    try:
+        institute = await institute_service.set_webhook_secret(
+            db=db,
+            owner_id=owner.id,
+            webhook_secret=request.razorpay_webhook_secret,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except EncryptionNotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    return RazorpayPayoutResponse(
+        status=institute.razorpay_status.value,
+        key_id=institute.razorpay_key_id,
+        secret_configured=institute.razorpay_key_secret_encrypted is not None,
+        webhook_configured=institute.razorpay_webhook_secret_encrypted is not None,
     )

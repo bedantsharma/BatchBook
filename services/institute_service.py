@@ -59,6 +59,9 @@ class InstituteService:
     ) -> InstituteSchema | None:
         return await self.institute_repo.get_by_owner_id(db, owner_id)
 
+    async def get_by_id(self, db: AsyncSession, institute_id: int) -> InstituteSchema | None:
+        return await self.institute_repo.get_by_id(db, institute_id)
+
     async def get_by_join_code(
         self, db: AsyncSession, join_code: str
     ) -> InstituteSchema | None:
@@ -132,6 +135,24 @@ class InstituteService:
             "razorpay_key_secret_encrypted": encrypt_secret(key_secret),
             "razorpay_status": RazorpayStatus.CONNECTED,
         }
+        return await self.institute_repo.update(db, institute, updates)
+
+    async def set_webhook_secret(
+        self, db: AsyncSession, owner_id: int, webhook_secret: str
+    ) -> InstituteSchema:
+        """Save the webhook secret the owner generated when registering BatchBook's
+        webhook URL in their own Razorpay dashboard; encrypts it at rest.
+
+        Raises:
+            ValueError: If no institute exists for this owner.
+        """
+        from services.crypto_service import encrypt_secret
+
+        institute = await self.institute_repo.get_by_owner_id(db, owner_id)
+        if not institute:
+            raise ValueError("No institute found for this owner")
+
+        updates = {"razorpay_webhook_secret_encrypted": encrypt_secret(webhook_secret)}
         return await self.institute_repo.update(db, institute, updates)
 
 
