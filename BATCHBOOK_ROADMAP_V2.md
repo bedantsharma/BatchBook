@@ -7,11 +7,11 @@
 ## Current Reality (as of June 2026)
 
 ### What actually works end-to-end
-- **278 backend tests passing** — models, routes, services all solid
+- **320 backend tests passing** — models, routes, services all solid
 - **Owner dashboard**: Students, Batches, Fees, Attendance, Tests pages all built and wired to real APIs
 - **Student dashboard**: Connected to real backend (not mock data)
 - **Auth flows**: Owner OTP → institute check → dashboard; Parent OTP → student dashboard
-- **Razorpay**: Payment link endpoint implemented
+- **Razorpay**: Owner can connect their own Razorpay account (Settings → Payouts); payment links now generate against that institute's own account instead of the platform's, with a success callback page for parents and an automatic + manual backfill for records missing a link — code complete, [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge
 
 ### What is code-complete but never manually tested
 - Phase 0 tasks (role routing, setup gate, student live data) — code merged, but "Verified by: pending" in old roadmap
@@ -49,7 +49,7 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 
 | Gap | Severity | Blocks |
 |-----|----------|--------|
-| All institutes' fee payments settle into the platform's own Razorpay account, not the owner's — single global `razorpay.Client` in `clients/razorpay_client.py` | 🔴 CRITICAL | Onboarding any real second paying owner; regulatory exposure (RBI Payment Aggregator rules) |
+| All institutes' fee payments settle into the platform's own Razorpay account, not the owner's | 🟢 FIXED — Task F.3, [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge | Was: onboarding any real second paying owner; regulatory exposure (RBI Payment Aggregator rules) |
 | No Razorpay webhook handler — payment status is 100% manual via `PATCH /fee/record/{id}/pay` | 🔴 CRITICAL | Reliable fee status, auto `fee_receipt` WATI send (Task D.2) |
 | No CI/CD pipeline | 🟡 HIGH | Safe deployments |
 | Owner header stats not wired | 🟡 HIGH | UX completeness |
@@ -73,7 +73,7 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 | **B** | Landing page (real marketing page + WATI website URL) | ✅ DONE — deployed at batchbookui.vercel.app |
 | **C** | Deployment — hosting, domain, SSL, CI/CD | 🟡 PARTIAL — C.1 ✅ C.2 ✅ C.3 ✅ C.4 ✅ · C.5 (smoke test) remaining |
 | **D** | WhatsApp notifications via Meta Cloud API direct (fee reminders, absence alerts) | ✅ DONE — D.0 ✅ D.1 ✅ D.2 ✅ D.3 ✅ · PRs open: BatchBook #33 + batchbookui #26 |
-| **F** | Multi-tenant payments — owner brings their own Razorpay account (BYO keys) + per-tenant webhooks | 🟢 READY — decision finalized 2026-06-23, not yet built |
+| **F** | Multi-tenant payments — owner brings their own Razorpay account (BYO keys) + per-tenant webhooks | 🟡 IN PROGRESS — F.1 ✅ F.2 🟡 F.3 ✅ F.3b ✅ (F.3/F.3b: [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge) · F.4–F.7 remaining |
 | **E** | Polish — multi-child, streak, receipts, E2E CI | ⬜ NOT-STARTED |
 | **S** | Pre-scaling hardening — local JWT verify, connection pooling, prod DB config, Render redundancy | 🟡 PARTIAL — S.1 ✅ S.3 ✅ S.5 ✅ · S.2 pool config ✅ Supavisor switch future · S.4 docs ✅ 2nd instance future |
 
@@ -82,7 +82,7 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 - Phase B second: landing page serves double duty — WATI needs a URL, owners need a place to find you
 - Phase C third: now you have something worth deploying
 - Phase D next up: Meta verification is approved, no external dependency left — implement whenever convenient
-- **Phase F before onboarding any second real paying owner** — today all fee money settles into your own Razorpay account regardless of institute; this is higher priority than Phase E even though it's lettered after it. Direction is now decided (BYO keys), so this is unblocked and just needs building.
+- **Phase F before onboarding any second real paying owner** — F.1–F.3b are code-complete ([PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge), closing the "money settles into your account, not theirs" gap; F.4 (webhook-based payment confirmation) and F.6 (subscription billing) remain before this is fully done.
 - Phase E ongoing: polish after real users give feedback
 
 ---
@@ -369,7 +369,7 @@ Recommended approach: **Vercel** (free, instant, auto-deploys from git push, giv
 
 ---
 
-## PHASE F — Multi-Tenant Payment Settlement (Bring-Your-Own Razorpay Account) 🟢 READY (decision finalized 2026-06-23)
+## PHASE F — Multi-Tenant Payment Settlement (Bring-Your-Own Razorpay Account) 🟡 IN PROGRESS (F.1–F.3b built, F.4–F.7 remaining)
 
 **Why this phase exists:** `clients/razorpay_client.py` builds one global `razorpay.Client` from your personal `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`, and `fee_service.py: generate_payment_link()` uses that same client for every institute's fee records. **Every parent payment, for every owner, currently settles into your own Razorpay account, not the owner's.** Fine for a single pilot institute (yours); breaks the moment a second real owner signs up — you'd be holding other people's tuition money and manually forwarding it, which is an operational headache and a real regulatory question under RBI's Payment Aggregator (PA-PG) rules.
 
@@ -400,34 +400,60 @@ Open questions from the decision doc are now resolved:
 
 ---
 
-### Task F.1 — Add Razorpay credential fields to `Institute` and a Settings page
+### Task F.1 — Add Razorpay credential fields to `Institute` and a Settings page ✅ DONE
 
-- [ ] Add nullable `razorpay_key_id` (plain) and `razorpay_key_secret` (**encrypted at rest**) columns to `InstituteSchema` — migrate with Alembic
-- [ ] Add `Settings` to the dashboard `NAV_ITEMS` sidebar and a corresponding route
-- [ ] Build the "Payouts" section: guided explainer of what connecting Razorpay involves, Key ID/Secret input fields, connection status (`Not connected` / `Connected` / `Needs reconnect`)
-- [ ] On the Fees page, show a "Connect Payouts" banner the first time an owner without connected keys tries to generate a payment link
+- [x] Add nullable `razorpay_key_id` (plain), `razorpay_key_secret_encrypted` (**encrypted at rest**), and a `razorpay_status` enum (`NOT_CONNECTED` / `CONNECTED` / `NEEDS_RECONNECT`) to `InstituteSchema` — migrated with Alembic
+- [x] Added `Settings → Payouts` to the dashboard sidebar and a corresponding route
+- [x] Built the "Payouts" section: guided explainer of what connecting Razorpay involves, Key ID/Secret input fields, connection status badge
+- [x] On the Fees page, a "Connect Payouts" banner shows the first time an owner without connected keys tries to generate a payment link
 
-**Verified by:** _(pending)_
+**PR:** [#42](https://github.com/bedantsharma/BatchBook/pull/42) (backend) + [#36](https://github.com/bedantsharma/batchbookui/pull/36) (frontend)
 
----
-
-### Task F.2 — Validate and store owner-provided keys
-
-- [ ] On Settings save: reject keys with an `rzp_test_` prefix (or warn clearly that test-mode payments won't actually settle anywhere real)
-- [ ] Run a lightweight Razorpay API call (e.g. fetch account/contact) with the submitted keys before saving, to confirm they're valid and live — surface a clear error if the call fails
-- [ ] Encrypt `razorpay_key_secret` at rest; never log or return it in any API response after initial save (Settings GET should return only a masked indicator, not the secret itself)
-
-**Verified by:** _(pending)_
+**Verified by:** _(bedant sharma — merged and live)_
 
 ---
 
-### Task F.3 — Per-institute Razorpay client in `fee_service.py`
+### Task F.2 — Validate and store owner-provided keys 🟡 PARTIAL
 
-- [ ] Replace the global `clients/razorpay_client.py` usage in `generate_payment_link()` with a per-request `razorpay.Client(institute.razorpay_key_id, decrypted_secret)` scoped to the institute owning the fee record
-- [ ] Reject `generate_payment_link()` calls for institutes with no connected keys (clear error pointing to Settings)
-- [ ] Remove the now-dead split/transfer logic path entirely — there is none in this model
+- [x] Encrypt `razorpay_key_secret` at rest (Fernet, key from `RAZORPAY_ENCRYPTION_KEY`); Settings `GET` returns only a `secret_configured: bool` indicator, never the secret itself
+- [x] Missing `RAZORPAY_ENCRYPTION_KEY` now returns a clear `503`, not a generic `500` — fixed after initial deploy ([#43](https://github.com/bedantsharma/BatchBook/pull/43))
+- [ ] On Settings save: reject keys with an `rzp_test_` prefix (or warn clearly that test-mode payments won't actually settle anywhere real) — **not built yet**
+- [ ] Run a lightweight Razorpay API call (e.g. fetch account/contact) with the submitted keys before saving, to confirm they're valid and live — **not built yet**; today any syntactically-plausible key is accepted and only fails at the first real payment-link generation attempt
 
-**Verified by:** _(pending)_
+**PR:** [#42](https://github.com/bedantsharma/BatchBook/pull/42), [#43](https://github.com/bedantsharma/BatchBook/pull/43)
+
+**Verified by:** _(bedant sharma — encryption + masking merged and live; key-prefix/liveness validation still open)_
+
+---
+
+### Task F.3 — Per-institute Razorpay client in `fee_service.py` ✅ DONE (pending PR #46 merge)
+
+- [x] Added `build_institute_razorpay_client(institute)` in `clients/razorpay_client.py` — builds a client from the institute's own decrypted credentials, returns `None` if not connected (never raises for the "not connected" case, so callers can branch cleanly)
+- [x] `GET /fee/record/{record_id}/payment-link` now uses the institute's own client instead of the platform's global one — returns `503` if not connected. **Behavior change:** previously this endpoint silently used the platform's shared account for every institute regardless of whether they'd connected their own
+- [x] The old global `get_razorpay_client()` is now unused by any payment-link code path (left in place rather than deleted, in case of future platform-side billing use — see Task F.6)
+- [ ] Split/transfer logic was never built (the Route model was abandoned before implementation — see the Phase F decision note above), so there was nothing to remove here
+
+**PR:** [#46](https://github.com/bedantsharma/BatchBook/pull/46) (open, not yet merged)
+
+**Verified by:** _(pending PR #46 merge + deploy; 320/320 backend tests passing on the branch)_
+
+---
+
+### Task F.3b — Payment success callback page + backfill for missing payment links ✅ DONE (pending PR #46 merge)
+
+**Why:** Two gaps closed alongside F.3: parents had no confirmation screen after paying (Razorpay's redirect went nowhere), and fee records created before an owner connects Razorpay would never get a payment link unless someone manually revisited every one.
+
+- [x] Razorpay payment links now set `callback_url` to `{FRONTEND_BASE_URL}/payment-success` and `callback_method: "get"`
+- [x] New `/payment-success` page (`batchbookui`) reads Razorpay's `razorpay_payment_link_status` query param — shows a real confirmation only when it equals `paid`, a neutral "not completed" message otherwise. No webhook exists (see Task F.4), so this page cannot confirm payment server-side — it's a landing page, not a source of truth
+- [x] `FeeService.backfill_missing_payment_links(db, institute_id, month)` — finds last month's fee records missing a link, generates one per record for institutes with Razorpay connected, skips/reports institutes that aren't, tolerates per-record failures without aborting the batch
+- [x] `POST /admin/backfill-payment-links` — manual trigger, protected by an `X-Admin-Secret` header (`ADMIN_BACKFILL_SECRET` env var)
+- [x] Daily in-process APScheduler job runs the same sweep automatically, guarded by a Postgres advisory lock so it can't double-fire across Render's 2 prod uvicorn workers
+- [ ] Set `FRONTEND_BASE_URL`, `ADMIN_BACKFILL_SECRET`, `ENABLE_SCHEDULER` in Render's env vars at next deploy
+- [ ] Manual smoke test: hit the admin endpoint against a real Razorpay test-mode institute, confirm a link appears on an unpaid record
+
+**PR:** [#46](https://github.com/bedantsharma/BatchBook/pull/46) (backend, open) + [#37](https://github.com/bedantsharma/batchbookui/pull/37)/[#38](https://github.com/bedantsharma/batchbookui/pull/38) (frontend, merged)
+
+**Verified by:** _(pending — backend PR #46 not yet merged; Render env vars and live admin-endpoint smoke test still to do)_
 
 ---
 
@@ -528,7 +554,8 @@ Do these after real users start using the app and give feedback. Don't do them b
 | Fix the 3 bugs found during A.3 manual testing (owner path missing from `/onboarding`, OTP resend bug, parent sign-out) | Confidence before real users |
 | Full smoke test on `https://batchbook.in` (Task C.5) | Confidence before real users |
 | Wait for Meta Business verification approval | WATI credentials (Phase D) |
-| Build the BYO-Razorpay Settings page + per-institute client (Tasks F.1–F.7) | Safe onboarding of any real second paying owner |
+| Merge [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) and set `FRONTEND_BASE_URL` / `ADMIN_BACKFILL_SECRET` / `ENABLE_SCHEDULER` in Render's env vars | Institute-scoped payment links, success callback, and the backfill job going live (Tasks F.3–F.3b) |
+| Build remaining BYO-Razorpay work: key validation (F.2), webhook (F.4), rotation detection (F.5), subscription billing (F.6), e2e test (F.7) | Safe onboarding of any real second paying owner |
 
 ---
 
@@ -635,7 +662,7 @@ uv run uvicorn app:app --reload --port 8000
 cd batchbookui && npm run dev
 
 # Tests:
-uv run pytest -v   # 278 tests
+uv run pytest -v   # 320 tests
 
 # E2E (when ready):
 npx playwright test
