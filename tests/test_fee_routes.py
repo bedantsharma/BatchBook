@@ -415,3 +415,114 @@ async def test_get_fee_structure_returns_404_when_not_set(client):
 
     app.dependency_overrides.clear()
     assert resp.status_code == 404
+
+
+# ─── GET /fee/record/{record_id}/payment-link ─────────────────────────────────
+
+
+async def test_get_payment_link_returns_503_when_institute_not_connected(client):
+    from models.enrollment_base import EnrollmentSchema
+    from models.institute_base import RazorpayStatus
+
+    teacher_id = uuid4()
+    owner_svc, institute_svc, batch = _setup_owner_institute_batch(teacher_id)
+
+    enrollment = MagicMock(spec=EnrollmentSchema)
+    enrollment.id = 20
+    enrollment.batch_id = 5
+
+    institute = _make_institute(institute_id=10)
+    institute.razorpay_status = RazorpayStatus.NOT_CONNECTED
+    institute.razorpay_key_id = None
+    institute.razorpay_key_secret_encrypted = None
+    institute_svc.institute_repo = MagicMock()
+    institute_svc.institute_repo.get_by_id = AsyncMock(return_value=institute)
+
+    fee_svc = MagicMock(spec=FeeService)
+
+    from app import app
+
+    app.dependency_overrides[get_owner_service] = lambda: owner_svc
+    app.dependency_overrides[get_institute_service] = lambda: institute_svc
+    app.dependency_overrides[get_fee_service] = lambda: fee_svc
+
+    with patch("routes.fee_route._verify_batch_belongs_to_institute", new=AsyncMock(return_value=batch)):
+        with patch("routes.fee_route.select"):
+            fee_result = MagicMock()
+            fee_result.scalar_one_or_none.return_value = _make_fee_record()
+            enroll_result = MagicMock()
+            enroll_result.scalar_one_or_none.return_value = enrollment
+
+            mock_db = MagicMock()
+            mock_db.execute = AsyncMock(side_effect=[fee_result, enroll_result])
+
+            from db.session import get_db
+
+            app.dependency_overrides[get_db] = lambda: mock_db
+
+            resp = await client.get(
+                "/fee/record/1/payment-link",
+                headers={"authorization": "Bearer test-token"},
+            )
+
+    app.dependency_overrides.clear()
+    assert resp.status_code == 503
+
+
+async def test_get_payment_link_success_when_institute_connected(client):
+    from models.enrollment_base import EnrollmentSchema
+    from models.institute_base import RazorpayStatus
+
+    teacher_id = uuid4()
+    owner_svc, institute_svc, batch = _setup_owner_institute_batch(teacher_id)
+
+    enrollment = MagicMock(spec=EnrollmentSchema)
+    enrollment.id = 20
+    enrollment.batch_id = 5
+
+    institute = _make_institute(institute_id=10)
+    institute.razorpay_status = RazorpayStatus.CONNECTED
+    institute.razorpay_key_id = "rzp_live_abc"
+    institute.razorpay_key_secret_encrypted = "enc-blob"
+    institute_svc.institute_repo = MagicMock()
+    institute_svc.institute_repo.get_by_id = AsyncMock(return_value=institute)
+
+    fee_svc = MagicMock(spec=FeeService)
+    fee_svc.generate_payment_link = AsyncMock(
+        return_value={
+            "record_id": 1,
+            "payment_link": "https://rzp.io/i/test",
+            "amount_pending": Decimal("1500.00"),
+            "month": date(2026, 5, 1),
+        }
+    )
+
+    from app import app
+
+    app.dependency_overrides[get_owner_service] = lambda: owner_svc
+    app.dependency_overrides[get_institute_service] = lambda: institute_svc
+    app.dependency_overrides[get_fee_service] = lambda: fee_svc
+
+    with patch("routes.fee_route._verify_batch_belongs_to_institute", new=AsyncMock(return_value=batch)):
+        with patch("routes.fee_route.build_institute_razorpay_client", return_value=MagicMock()):
+            with patch("routes.fee_route.select"):
+                fee_result = MagicMock()
+                fee_result.scalar_one_or_none.return_value = _make_fee_record()
+                enroll_result = MagicMock()
+                enroll_result.scalar_one_or_none.return_value = enrollment
+
+                mock_db = MagicMock()
+                mock_db.execute = AsyncMock(side_effect=[fee_result, enroll_result])
+
+                from db.session import get_db
+
+                app.dependency_overrides[get_db] = lambda: mock_db
+
+                resp = await client.get(
+                    "/fee/record/1/payment-link",
+                    headers={"authorization": "Bearer test-token"},
+                )
+
+    app.dependency_overrides.clear()
+    assert resp.status_code == 200
+    assert resp.json()["payment_link"] == "https://rzp.io/i/test"

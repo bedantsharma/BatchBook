@@ -122,3 +122,33 @@ class FeeRepository:
         await db.commit()
         await db.refresh(record)
         return record
+
+    async def get_records_missing_payment_link_for_month(
+        self, db: AsyncSession, month: date, institute_id: int | None = None
+    ):
+        """Fee records for a month with no payment link yet, joined to their institute.
+
+        Excludes FULLY_PAID records (no link is needed once a fee is settled) and
+        records that already have a link. Used by the payment-link backfill job
+        and its manual admin endpoint.
+        """
+        from models.batch_base import BatchSchema
+        from models.enrollment_base import EnrollmentSchema
+        from models.institute_base import InstituteSchema
+
+        query = (
+            select(FeeRecordSchema, InstituteSchema)
+            .join(EnrollmentSchema, FeeRecordSchema.enrollment_id == EnrollmentSchema.id)
+            .join(BatchSchema, EnrollmentSchema.batch_id == BatchSchema.id)
+            .join(InstituteSchema, BatchSchema.institute_id == InstituteSchema.id)
+            .where(
+                FeeRecordSchema.month == month,
+                FeeRecordSchema.payment_link.is_(None),
+                FeeRecordSchema.status != FeeStatus.FULLY_PAID,
+            )
+        )
+        if institute_id is not None:
+            query = query.where(InstituteSchema.id == institute_id)
+
+        result = await db.execute(query)
+        return [(row[0], row[1]) for row in result.all()]

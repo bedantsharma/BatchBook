@@ -4,9 +4,9 @@ Unit tests for services/fee_service.py.
 All repository and DB calls are mocked — no DB or network required.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -475,6 +475,34 @@ async def test_generate_payment_link_standard_when_payment_method_none():
     assert "upi_link" not in data_sent
 
 
+async def test_generate_payment_link_includes_callback_url():
+    """callback_url/callback_method route the payer back to the success page."""
+    svc = FeeService()
+    db = MagicMock()
+    razorpay_client = MagicMock()
+
+    record = _make_fee_record(
+        record_id=6,
+        amount_due=Decimal("1500.00"),
+        amount_paid=Decimal("0"),
+        status=FeeStatus.NOT_PAID,
+        month=date(2026, 5, 1),
+    )
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_record_by_id = AsyncMock(return_value=record)
+    svc.fee_repo.update_payment_link = AsyncMock(return_value=record)
+    svc._create_razorpay_link = AsyncMock(return_value={"short_url": "https://rzp.io/i/cb"})
+
+    with patch("services.fee_service.get_settings") as mock_settings:
+        mock_settings.return_value.frontend_base_url = "https://batchbook.in"
+        await svc.generate_payment_link(db=db, record_id=6, razorpay_client=razorpay_client)
+
+    _, data_sent = svc._create_razorpay_link.call_args.args
+    assert data_sent["callback_url"] == "https://batchbook.in/payment-success"
+    assert data_sent["callback_method"] == "get"
+
+
 async def test_generate_payment_link_raises_when_record_not_found():
     svc = FeeService()
     db = MagicMock()
@@ -503,3 +531,157 @@ async def test_generate_payment_link_raises_when_already_fully_paid():
 
     with pytest.raises(ValueError, match="already fully paid"):
         await svc.generate_payment_link(db=db, record_id=1, razorpay_client=razorpay_client)
+
+
+# ---------------------------------------------------------------------------
+# backfill_missing_payment_links
+# ---------------------------------------------------------------------------
+
+
+def _make_backfill_institute(institute_id=10, status=None):
+    from models.institute_base import InstituteSchema, RazorpayStatus
+
+    i = MagicMock(spec=InstituteSchema)
+    i.id = institute_id
+    i.razorpay_status = status or RazorpayStatus.CONNECTED
+    i.razorpay_key_id = "rzp_live_abc"
+    i.razorpay_key_secret_encrypted = "enc-blob"
+    return i
+
+
+async def test_backfill_generates_links_for_connected_institute():
+    svc = FeeService()
+    db = MagicMock()
+
+    institute = _make_backfill_institute()
+    record1 = _make_fee_record(record_id=1)
+    record2 = _make_fee_record(record_id=2)
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_records_missing_payment_link_for_month = AsyncMock(
+        return_value=[(record1, institute), (record2, institute)]
+    )
+    svc.generate_payment_link = AsyncMock(return_value={})
+
+    with patch("clients.razorpay_client.build_institute_razorpay_client", return_value=MagicMock()):
+        summary = await svc.backfill_missing_payment_links(
+            db=db, institute_id=None, month=date(2026, 6, 1)
+        )
+
+    assert summary["checked"] == 2
+    assert summary["generated"] == 2
+    assert summary["skipped_no_razorpay"] == 0
+    assert summary["failed"] == 0
+    assert svc.generate_payment_link.call_count == 2
+
+
+async def test_backfill_skips_institutes_without_razorpay_connected():
+    svc = FeeService()
+    db = MagicMock()
+
+    institute = _make_backfill_institute()
+    record1 = _make_fee_record(record_id=1)
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_records_missing_payment_link_for_month = AsyncMock(
+        return_value=[(record1, institute)]
+    )
+    svc.generate_payment_link = AsyncMock()
+
+    with patch("clients.razorpay_client.build_institute_razorpay_client", return_value=None):
+        summary = await svc.backfill_missing_payment_links(
+            db=db, institute_id=None, month=date(2026, 6, 1)
+        )
+
+    assert summary["skipped_no_razorpay"] == 1
+    assert summary["generated"] == 0
+    svc.generate_payment_link.assert_not_called()
+
+
+async def test_backfill_isolates_client_build_failure_to_one_institute():
+    """A broken Razorpay client for one institute must not abort the whole batch."""
+    svc = FeeService()
+    db = MagicMock()
+
+    broken_institute = _make_backfill_institute(institute_id=10)
+    healthy_institute = _make_backfill_institute(institute_id=20)
+    broken_record = _make_fee_record(record_id=1)
+    healthy_record = _make_fee_record(record_id=2)
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_records_missing_payment_link_for_month = AsyncMock(
+        return_value=[(broken_record, broken_institute), (healthy_record, healthy_institute)]
+    )
+    svc.generate_payment_link = AsyncMock(return_value={})
+
+    with patch(
+        "clients.razorpay_client.build_institute_razorpay_client",
+        side_effect=[ValueError("Could not decrypt stored secret — key may have changed"), MagicMock()],
+    ):
+        summary = await svc.backfill_missing_payment_links(
+            db=db, institute_id=None, month=date(2026, 6, 1)
+        )
+
+    assert summary["skipped_no_razorpay"] == 1
+    assert summary["generated"] == 1
+    assert summary["errors"] == [
+        {"record_id": 1, "error": "Could not decrypt stored secret — key may have changed"}
+    ]
+    svc.generate_payment_link.assert_called_once()
+
+
+async def test_backfill_counts_failures_without_stopping_the_batch():
+    svc = FeeService()
+    db = MagicMock()
+
+    institute = _make_backfill_institute()
+    record1 = _make_fee_record(record_id=1)
+    record2 = _make_fee_record(record_id=2)
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_records_missing_payment_link_for_month = AsyncMock(
+        return_value=[(record1, institute), (record2, institute)]
+    )
+    svc.generate_payment_link = AsyncMock(side_effect=[RuntimeError("razorpay down"), {}])
+
+    with patch("clients.razorpay_client.build_institute_razorpay_client", return_value=MagicMock()):
+        summary = await svc.backfill_missing_payment_links(
+            db=db, institute_id=None, month=date(2026, 6, 1)
+        )
+
+    assert summary["failed"] == 1
+    assert summary["generated"] == 1
+    assert summary["errors"] == [{"record_id": 1, "error": "razorpay down"}]
+
+
+async def test_backfill_defaults_month_to_last_calendar_month():
+    svc = FeeService()
+    db = MagicMock()
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_records_missing_payment_link_for_month = AsyncMock(return_value=[])
+
+    today = date.today()
+    first_of_this_month = today.replace(day=1)
+    expected_month = (first_of_this_month - timedelta(days=1)).replace(day=1)
+
+    summary = await svc.backfill_missing_payment_links(db=db, institute_id=None, month=None)
+
+    svc.fee_repo.get_records_missing_payment_link_for_month.assert_called_once_with(
+        db, expected_month, None
+    )
+    assert summary["month"] == expected_month
+
+
+async def test_backfill_passes_institute_id_filter_through():
+    svc = FeeService()
+    db = MagicMock()
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_records_missing_payment_link_for_month = AsyncMock(return_value=[])
+
+    await svc.backfill_missing_payment_links(db=db, institute_id=42, month=date(2026, 6, 1))
+
+    svc.fee_repo.get_records_missing_payment_link_for_month.assert_called_once_with(
+        db, date(2026, 6, 1), 42
+    )

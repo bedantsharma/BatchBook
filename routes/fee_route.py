@@ -8,8 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from supabase import AsyncClient
 
-from clients.razorpay_client import get_razorpay_client
+from clients.razorpay_client import build_institute_razorpay_client
 from clients.supabase_client import get_supabase_client
+from config import get_settings
 from db.session import get_db
 from models.batch_base import BatchSchema
 from models.enrollment_base import EnrollmentSchema
@@ -410,8 +411,15 @@ async def get_payment_link(
 
     await _verify_batch_belongs_to_institute(db, enrollment.batch_id, institute_id)
 
+    institute = await institute_service.institute_repo.get_by_id(db, institute_id)
+    razorpay_client = build_institute_razorpay_client(institute) if institute else None
+    if razorpay_client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Razorpay not connected for this institute — connect it in Owner → Payouts first",
+        )
+
     try:
-        razorpay_client = get_razorpay_client()
         result = await fee_service.generate_payment_link(
             db=db,
             record_id=record_id,
@@ -419,8 +427,6 @@ async def get_payment_link(
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error(e)
         raise HTTPException(
@@ -500,7 +506,11 @@ async def send_fee_reminder_for_record(
     due_date = f"{enrollment.due_day} {fee_record.month.strftime('%b %Y')}"
 
     inst = await institute_service.institute_repo.get_by_id(db, institute_id)
-    join_url = f"https://batchbook.in/join/{inst.join_code}" if inst and inst.join_code else None
+    join_url = (
+        f"{get_settings().frontend_base_url}/join/{inst.join_code}"
+        if inst and inst.join_code
+        else None
+    )
     link_text = fee_record.payment_link or "Contact your institute"
     amount_str = (
         f"{int(amount_pending):,}"
@@ -559,7 +569,11 @@ async def send_fee_reminders_for_all(
     month_date = _parse_month(month)
 
     inst = await institute_service.institute_repo.get_by_id(db, institute_id)
-    join_url = f"https://batchbook.in/join/{inst.join_code}" if inst and inst.join_code else None
+    join_url = (
+        f"{get_settings().frontend_base_url}/join/{inst.join_code}"
+        if inst and inst.join_code
+        else None
+    )
 
     result = await db.execute(
         select(FeeRecordSchema, EnrollmentSchema, StudentSchema, ParentSchema, BatchSchema)

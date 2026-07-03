@@ -13,6 +13,7 @@ from supabase._async.client import create_client
 from clients import supabase_client
 from config import get_settings
 from rate_limiter import limiter
+from routes.admin_route import router as admin_router
 from routes.attendance_route import router as attendance_router
 from routes.batch_route import router as batch_router
 from routes.enrollment_route import router as enrollment_router
@@ -23,6 +24,7 @@ from routes.student_dashboard_route import router as student_dashboard_router
 from routes.student_route import router as student_router
 from routes.teacher_route import router as teacher_router
 from routes.test_score_route import router as test_score_router
+from scheduler import shutdown_scheduler, start_scheduler
 
 
 @asynccontextmanager
@@ -30,7 +32,11 @@ async def lifespan(app: FastAPI):
     supabase_client.supabase = await create_client(
         get_settings().supabase_url, get_settings().supabase_key
     )
+    if get_settings().enable_scheduler:
+        start_scheduler()
     yield
+    if get_settings().enable_scheduler:
+        shutdown_scheduler()
 
 
 app = FastAPI(
@@ -106,4 +112,5 @@ app.include_router(router=batch_router)
 app.include_router(router=enrollment_router)
 app.include_router(router=fee_router)
 app.include_router(router=attendance_router)
+app.include_router(router=admin_router)
 app.include_router(router=test_score_router)
