@@ -31,7 +31,11 @@ from routes.responses.owner_stats_response import OwnerStatsResponse
 from routes.responses.razorpay_payout_response import RazorpayPayoutResponse
 from routes.responses.verify_owner_response import VerifyOwnerResponse
 from services.crypto_service import EncryptionNotConfigured
-from services.institute_service import InstituteService, get_institute_service
+from services.institute_service import (
+    InstituteService,
+    InvalidRazorpayCredentialsError,
+    get_institute_service,
+)
 from services.owner_service import OwnerService, get_owner_service
 
 router = APIRouter(prefix="/owner")
@@ -379,6 +383,8 @@ async def update_razorpay_payouts(
             key_id=request.razorpay_key_id,
             key_secret=request.razorpay_key_secret,
         )
+    except InvalidRazorpayCredentialsError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except EncryptionNotConfigured as e:

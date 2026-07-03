@@ -69,11 +69,11 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| **A** | Fix ship-blockers — nginx, stats, student tabs | 🟡 PARTIAL — A.1 ✅ A.2 ✅ A.4 ✅ A.5 ✅ · A.3 pending manual test |
+| **A** | Fix ship-blockers — nginx, stats, student tabs | 🟡 PARTIAL — A.1 ✅ A.2 ✅ A.3 ✅ A.4 ✅ A.5 ✅ · A.1/A.2/A.4/A.5 still need a live `make prod` smoke test |
 | **B** | Landing page (real marketing page + WATI website URL) | ✅ DONE — deployed at batchbookui.vercel.app |
 | **C** | Deployment — hosting, domain, SSL, CI/CD | 🟡 PARTIAL — C.1 ✅ C.2 ✅ C.3 ✅ C.4 ✅ · C.5 (smoke test) remaining |
 | **D** | WhatsApp notifications via Meta Cloud API direct (fee reminders, absence alerts) | ✅ DONE — D.0 ✅ D.1 ✅ D.2 ✅ D.3 ✅ · PRs open: BatchBook #33 + batchbookui #26 |
-| **F** | Multi-tenant payments — owner brings their own Razorpay account (BYO keys) + per-tenant webhooks | 🟡 IN PROGRESS — F.1 ✅ F.2 🟡 F.3 ✅ F.3b ✅ (F.3/F.3b: [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge) · F.4–F.7 remaining |
+| **F** | Multi-tenant payments — owner brings their own Razorpay account (BYO keys) + per-tenant webhooks | 🟡 IN PROGRESS — F.1 ✅ F.2 ✅ F.3 ✅ F.3b ✅ (F.3/F.3b: [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge; F.2 key-prefix/liveness validation code-complete, not yet a PR) · F.4–F.7 remaining |
 | **E** | Polish — multi-child, streak, receipts, E2E CI | ⬜ NOT-STARTED |
 | **S** | Pre-scaling hardening — local JWT verify, connection pooling, prod DB config, Render redundancy | 🟡 PARTIAL — S.1 ✅ S.3 ✅ S.5 ✅ · S.2 pool config ✅ Supavisor switch future · S.4 docs ✅ 2nd instance future |
 
@@ -87,7 +87,7 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 
 ---
 
-## PHASE A — Fix Ship-Blockers 🟡 PARTIAL (A.3 pending manual test)
+## PHASE A — Fix Ship-Blockers 🟡 PARTIAL (A.1/A.2/A.4/A.5 pending live smoke test)
 
 ---
 
@@ -174,6 +174,22 @@ works fine for the student page
 as it works for the student page i also expect it to work for the parent page
 
 ---
+
+### ✅ All 3 bugs fixed (confirmed in code 2026-07-03)
+
+- **Owner path on `/onboarding`:** `RoleStep.jsx` now has a third card — `Owner / Institute` (`id: 'owner'`), not disabled. Selecting it and continuing routes to `/phone-login` via `OnboardingWizard.jsx`'s `next()` check (`if (data.role === 'owner') navigate('/phone-login')`).
+- **OTP resend bug:** `OtpVerification.jsx`'s `handleResendOtp()` calls `setOtp('')` and `setIsResending(false)` after a successful resend, clearing the stale digits and re-enabling the (previously `disabled={isLoading || isResending}`) digit inputs so the new code can be typed and verified.
+- **Parent/student sign-out:** Sign-out is now centralized in `AuthContext.jsx`'s `signOut()`, which clears all 4 keys (`bb_role`, `bb_student_id`, `bb_student_name`, `onboarding_profile`) and calls `supabase.auth.signOut()`. Both `StudentDashboard.jsx` and `OwnerDashboard.jsx` (and the legacy `Dashboard.jsx`) call this same shared function, so parent sign-out matches student sign-out behavior.
+
+Shipped across `fix/a3-bugs` commits in `batchbookui` (8780e39, 3db1f88, c90670b bumps in `BatchBook`). Not yet re-run live end-to-end since the fix — worth a quick manual pass alongside Task C.5, but no longer blocking.
+
+### ✅ All 3 bugs fixed (confirmed in code 2026-07-03)
+
+- **Owner path on `/onboarding`:** `RoleStep.jsx` now has a third card — `Owner / Institute` (`id: 'owner'`), not disabled. Selecting it and continuing routes to `/phone-login` via `OnboardingWizard.jsx`'s `next()` check (`if (data.role === 'owner') navigate('/phone-login')`).
+- **OTP resend bug:** `OtpVerification.jsx`'s `handleResendOtp()` calls `setOtp('')` and `setIsResending(false)` after a successful resend, clearing the stale digits and re-enabling the (previously `disabled={isLoading || isResending}`) digit inputs so the new code can be typed and verified.
+- **Parent/student sign-out:** Sign-out is now centralized in `AuthContext.jsx`'s `signOut()`, which clears all 4 keys (`bb_role`, `bb_student_id`, `bb_student_name`, `onboarding_profile`) and calls `supabase.auth.signOut()`. Both `StudentDashboard.jsx` and `OwnerDashboard.jsx` (and the legacy `Dashboard.jsx`) call this same shared function, so parent sign-out matches student sign-out behavior.
+
+Shipped across `fix/a3-bugs` commits in `batchbookui` (8780e39, 3db1f88, c90670b bumps in `BatchBook`). Not yet re-run live end-to-end since the fix — worth a quick manual pass alongside Task C.5, but no longer blocking.
 
 ### Task A.4 — Surface Razorpay payment link in student dashboard
 
@@ -413,16 +429,16 @@ Open questions from the decision doc are now resolved:
 
 ---
 
-### Task F.2 — Validate and store owner-provided keys 🟡 PARTIAL
+### Task F.2 — Validate and store owner-provided keys ✅ DONE (pending PR merge)
 
 - [x] Encrypt `razorpay_key_secret` at rest (Fernet, key from `RAZORPAY_ENCRYPTION_KEY`); Settings `GET` returns only a `secret_configured: bool` indicator, never the secret itself
 - [x] Missing `RAZORPAY_ENCRYPTION_KEY` now returns a clear `503`, not a generic `500` — fixed after initial deploy ([#43](https://github.com/bedantsharma/BatchBook/pull/43))
-- [ ] On Settings save: reject keys with an `rzp_test_` prefix (or warn clearly that test-mode payments won't actually settle anywhere real) — **not built yet**
-- [ ] Run a lightweight Razorpay API call (e.g. fetch account/contact) with the submitted keys before saving, to confirm they're valid and live — **not built yet**; today any syntactically-plausible key is accepted and only fails at the first real payment-link generation attempt
+- [x] On Settings save: reject keys that don't start with `rzp_live_` (covers `rzp_test_` and anything else) with a `400` explaining test-mode payments won't settle anywhere real — `InstituteService.connect_razorpay()` in `services/institute_service.py`
+- [x] Run a lightweight Razorpay API call (`client.payment.all({"count": 1})`, via `asyncio.to_thread`) with the submitted keys before saving, to confirm they authenticate; `razorpay.errors.BadRequestError` → `InvalidRazorpayCredentialsError` → `400` in `routes/owner_route.py`'s `update_razorpay_payouts`. Previously any syntactically-plausible key was accepted and only failed at the first real payment-link generation attempt
 
-**PR:** [#42](https://github.com/bedantsharma/BatchBook/pull/42), [#43](https://github.com/bedantsharma/BatchBook/pull/43)
+**PR:** [#42](https://github.com/bedantsharma/BatchBook/pull/42), [#43](https://github.com/bedantsharma/BatchBook/pull/43), key-prefix/liveness validation (this branch, not yet a PR)
 
-**Verified by:** _(bedant sharma — encryption + masking merged and live; key-prefix/liveness validation still open)_
+**Verified by:** _(bedant sharma — encryption + masking merged and live; key-prefix/liveness validation code-complete 2026-07-03, 323/323 backend tests passing, pending PR + manual smoke test with a real test-mode key)_
 
 ---
 
@@ -551,8 +567,7 @@ Do these after real users start using the app and give feedback. Don't do them b
 
 | Action | Unblocks |
 |--------|---------|
-| Fix the 3 bugs found during A.3 manual testing (owner path missing from `/onboarding`, OTP resend bug, parent sign-out) | Confidence before real users |
-| Full smoke test on `https://batchbook.in` (Task C.5) | Confidence before real users |
+| Full smoke test on `https://batchbook.in` (Task C.5) — now includes re-verifying the 3 fixed A.3 bugs live | Confidence before real users |
 | Wait for Meta Business verification approval | WATI credentials (Phase D) |
 | Merge [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) and set `FRONTEND_BASE_URL` / `ADMIN_BACKFILL_SECRET` / `ENABLE_SCHEDULER` in Render's env vars | Institute-scoped payment links, success callback, and the backfill job going live (Tasks F.3–F.3b) |
 | Build remaining BYO-Razorpay work: key validation (F.2), webhook (F.4), rotation detection (F.5), subscription billing (F.6), e2e test (F.7) | Safe onboarding of any real second paying owner |

@@ -123,12 +123,16 @@ async def test_connect_razorpay_encrypts_and_updates(service, mock_db):
     with (
         patch.object(service.institute_repo, "get_by_owner_id", new=AsyncMock(return_value=existing)),
         patch.object(service.institute_repo, "update", new=update_mock),
+        patch("services.institute_service.razorpay.Client") as mock_client_cls,
     ):
+        mock_client_cls.return_value.payment.all.return_value = {"items": []}
         result = await service.connect_razorpay(
             mock_db, owner_id=4, key_id="rzp_live_abc123", key_secret="supersecretvalue"
         )
 
     assert result is updated
+    mock_client_cls.assert_called_once_with(auth=("rzp_live_abc123", "supersecretvalue"))
+    mock_client_cls.return_value.payment.all.assert_called_once_with({"count": 1})
     update_mock.assert_called_once()
     call_args = update_mock.call_args[0]
     assert call_args[1] is existing
@@ -145,3 +149,49 @@ async def test_connect_razorpay_raises_when_no_institute(service, mock_db):
             await service.connect_razorpay(
                 mock_db, owner_id=999, key_id="rzp_live_x", key_secret="secretvalue"
             )
+
+
+async def test_connect_razorpay_rejects_test_mode_key(service, mock_db):
+    from services.institute_service import InvalidRazorpayCredentialsError
+
+    existing = _make_institute(owner_id=4)
+    update_mock = AsyncMock()
+
+    with (
+        patch.object(service.institute_repo, "get_by_owner_id", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "update", new=update_mock),
+        patch("services.institute_service.razorpay.Client") as mock_client_cls,
+    ):
+        with pytest.raises(InvalidRazorpayCredentialsError, match="Test-mode keys"):
+            await service.connect_razorpay(
+                mock_db, owner_id=4, key_id="rzp_test_abc123", key_secret="supersecretvalue"
+            )
+
+    # never reached the live check or persisted anything
+    mock_client_cls.assert_not_called()
+    update_mock.assert_not_called()
+
+
+async def test_connect_razorpay_raises_when_credentials_fail_live_check(service, mock_db):
+    import razorpay
+
+    from services.institute_service import InvalidRazorpayCredentialsError
+
+    existing = _make_institute(owner_id=4)
+    update_mock = AsyncMock()
+
+    with (
+        patch.object(service.institute_repo, "get_by_owner_id", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "update", new=update_mock),
+        patch("services.institute_service.razorpay.Client") as mock_client_cls,
+    ):
+        mock_client_cls.return_value.payment.all.side_effect = razorpay.errors.BadRequestError(
+            "Authentication failed"
+        )
+        with pytest.raises(InvalidRazorpayCredentialsError, match="Razorpay rejected these credentials"):
+            await service.connect_razorpay(
+                mock_db, owner_id=4, key_id="rzp_live_bad", key_secret="wrongsecret"
+            )
+
+    # invalid credentials must never be persisted
+    update_mock.assert_not_called()

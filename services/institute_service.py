@@ -1,12 +1,18 @@
+import asyncio
 import secrets
 import string
 from dataclasses import dataclass
 
+import razorpay
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.institute_base import InstituteSchema, RazorpayStatus
 from models.owner_base import OwnerSchema
 from repositories.institute_repository import InstituteRepository
+
+
+class InvalidRazorpayCredentialsError(ValueError):
+    """Raised when submitted Razorpay keys are test-mode or fail live authentication."""
 
 
 def _generate_join_code() -> str:
@@ -94,14 +100,32 @@ class InstituteService:
     ) -> InstituteSchema:
         """Save an owner's own Razorpay Key ID/Secret; encrypts the secret at rest.
 
+        Rejects test-mode keys and confirms the submitted keys actually
+        authenticate against Razorpay before persisting anything.
+
         Raises:
             ValueError: If no institute exists for this owner.
+            InvalidRazorpayCredentialsError: If the key is test-mode or Razorpay
+                rejects the credentials.
         """
         from services.crypto_service import encrypt_secret
 
         institute = await self.institute_repo.get_by_owner_id(db, owner_id)
         if not institute:
             raise ValueError("No institute found for this owner")
+
+        if not key_id.startswith("rzp_live_"):
+            raise InvalidRazorpayCredentialsError(
+                "Test-mode keys (rzp_test_...) aren't accepted — payments made with "
+                "them never settle anywhere real. Use the live Key ID/Secret from "
+                "Razorpay Dashboard → Account & Settings → API Keys."
+            )
+
+        client = razorpay.Client(auth=(key_id, key_secret))
+        try:
+            await asyncio.to_thread(client.payment.all, {"count": 1})
+        except razorpay.errors.BadRequestError as e:
+            raise InvalidRazorpayCredentialsError(f"Razorpay rejected these credentials: {e}") from e
 
         updates = {
             "razorpay_key_id": key_id,
