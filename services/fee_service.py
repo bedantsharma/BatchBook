@@ -3,6 +3,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
 
+import razorpay
 from fastapi import BackgroundTasks
 from loguru import logger
 from sqlalchemy import select
@@ -427,12 +428,27 @@ class FeeService:
                 summary["skipped_no_razorpay"] += len(records)
                 continue
 
-            for record in records:
+            for idx, record in enumerate(records):
                 try:
                     await self.generate_payment_link(
                         db=db, record_id=record.id, razorpay_client=razorpay_client
                     )
                     summary["generated"] += 1
+                except razorpay.errors.BadRequestError as e:
+                    logger.error(
+                        f"Razorpay auth failed for institute {inst_id} — flagging for "
+                        f"reconnect and skipping its remaining records this sweep: {e}"
+                    )
+                    from services.institute_service import InstituteService
+
+                    await InstituteService().flag_needs_reconnect(db, inst_id)
+                    remaining = records[idx:]
+                    summary["failed"] += len(remaining)
+                    for r in remaining:
+                        summary["errors"].append(
+                            {"record_id": r.id, "error": "Razorpay authentication failed"}
+                        )
+                    break
                 except Exception as e:
                     logger.error(f"Failed to backfill payment link for FeeRecord {record.id}: {e}")
                     summary["failed"] += 1

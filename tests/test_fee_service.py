@@ -816,3 +816,44 @@ async def test_backfill_passes_institute_id_filter_through():
     svc.fee_repo.get_records_missing_payment_link_for_month.assert_called_once_with(
         db, date(2026, 6, 1), 42
     )
+
+
+async def test_backfill_flags_institute_and_skips_remaining_on_auth_failure():
+    import razorpay
+
+    svc = FeeService()
+    db = MagicMock()
+
+    institute = _make_backfill_institute(institute_id=10)
+    other_institute = _make_backfill_institute(institute_id=20)
+    record1 = _make_fee_record(record_id=1)
+    record2 = _make_fee_record(record_id=2)  # same institute as record1 — must be skipped
+    record3 = _make_fee_record(record_id=3)  # different institute — must still succeed
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_records_missing_payment_link_for_month = AsyncMock(
+        return_value=[
+            (record1, institute),
+            (record2, institute),
+            (record3, other_institute),
+        ]
+    )
+    svc.generate_payment_link = AsyncMock(
+        side_effect=[razorpay.errors.BadRequestError("Authentication failed"), {}]
+    )
+
+    mock_institute_service = MagicMock()
+    mock_institute_service.flag_needs_reconnect = AsyncMock()
+
+    with (
+        patch("clients.razorpay_client.build_institute_razorpay_client", return_value=MagicMock()),
+        patch("services.institute_service.InstituteService", return_value=mock_institute_service),
+    ):
+        summary = await svc.backfill_missing_payment_links(
+            db=db, institute_id=None, month=date(2026, 6, 1)
+        )
+
+    assert summary["generated"] == 1
+    assert summary["failed"] == 2
+    mock_institute_service.flag_needs_reconnect.assert_called_once_with(db, 10)
+    assert svc.generate_payment_link.call_count == 2  # record2 was never attempted
