@@ -540,3 +540,92 @@ async def test_update_webhook_secret_returns_503_when_encryption_not_configured(
 
     assert response.status_code == 503
     assert "RAZORPAY_ENCRYPTION_KEY" in response.json()["detail"]
+
+
+# ─── POST /owner/institute/payouts/test-connection ─────────────────────────────
+
+
+def _setup_institute_service_test_connection(client, result=None, error=None):
+    mock_svc = MagicMock(spec=InstituteService)
+    if error is not None:
+        mock_svc.test_razorpay_connection = AsyncMock(side_effect=error)
+    else:
+        mock_svc.test_razorpay_connection = AsyncMock(return_value=result)
+    from app import app
+
+    app.dependency_overrides[get_institute_service] = lambda: mock_svc
+    return mock_svc
+
+
+async def test_test_connection_returns_connected_status(client):
+    teacher_id = uuid4()
+    owner = _make_owner(teacher_id)
+    result = _make_institute(
+        owner_id=owner.id, razorpay_status="CONNECTED", razorpay_key_id="rzp_live_abc"
+    )
+
+    _setup_owner_service(client, teacher_id, owner=owner)
+    _setup_institute_service_test_connection(client, result=result)
+
+    response = await client.post(
+        "/owner/institute/payouts/test-connection",
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "CONNECTED"
+
+
+async def test_test_connection_returns_needs_reconnect_status(client):
+    teacher_id = uuid4()
+    owner = _make_owner(teacher_id)
+    result = _make_institute(
+        owner_id=owner.id, razorpay_status="NEEDS_RECONNECT", razorpay_key_id="rzp_live_abc"
+    )
+
+    _setup_owner_service(client, teacher_id, owner=owner)
+    _setup_institute_service_test_connection(client, result=result)
+
+    response = await client.post(
+        "/owner/institute/payouts/test-connection",
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "NEEDS_RECONNECT"
+
+
+async def test_test_connection_returns_404_when_no_institute(client):
+    teacher_id = uuid4()
+    owner = _make_owner(teacher_id)
+
+    _setup_owner_service(client, teacher_id, owner=owner)
+    _setup_institute_service_test_connection(
+        client, error=ValueError("No institute found for this owner")
+    )
+
+    response = await client.post(
+        "/owner/institute/payouts/test-connection",
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 404
+
+
+async def test_test_connection_returns_503_when_encryption_not_configured(client):
+    from services.crypto_service import EncryptionNotConfigured
+
+    teacher_id = uuid4()
+    owner = _make_owner(teacher_id)
+
+    _setup_owner_service(client, teacher_id, owner=owner)
+    _setup_institute_service_test_connection(
+        client, error=EncryptionNotConfigured("RAZORPAY_ENCRYPTION_KEY not set")
+    )
+
+    response = await client.post(
+        "/owner/institute/payouts/test-connection",
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 503

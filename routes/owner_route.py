@@ -400,6 +400,42 @@ async def update_razorpay_payouts(
     )
 
 
+@router.post(
+    "/institute/payouts/test-connection",
+    summary="Re-validate the owner's saved Razorpay credentials against the live API",
+    response_model=RazorpayPayoutResponse,
+)
+async def test_razorpay_connection(
+    db: AsyncSession = Depends(get_db),
+    owner_service: OwnerServiceDep = None,
+    institute_service: InstituteServiceDep = None,
+    teacher_id: UUID = Depends(_get_current_teacher_id),
+):
+    """Re-check the institute's already-saved keys (no new keys submitted here).
+
+    Confirms whether stored credentials still authenticate — flips status to
+    NEEDS_RECONNECT on failure or back to CONNECTED on success, matching the
+    status transitions Task F.5 relies on elsewhere.
+    """
+    owner = await owner_service.get_owner_by_teacher_id(db=db, teacher_id=teacher_id)
+    if not owner:
+        raise HTTPException(status_code=404, detail="Owner record not found")
+
+    try:
+        institute = await institute_service.test_razorpay_connection(db=db, owner_id=owner.id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except EncryptionNotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    return RazorpayPayoutResponse(
+        status=institute.razorpay_status.value,
+        key_id=institute.razorpay_key_id,
+        secret_configured=institute.razorpay_key_secret_encrypted is not None,
+        webhook_configured=institute.razorpay_webhook_secret_encrypted is not None,
+    )
+
+
 @router.patch(
     "/institute/payouts/webhook",
     summary="Save the webhook secret for the owner's Razorpay payout account (encrypted at rest)",
