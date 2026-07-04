@@ -49,8 +49,8 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 
 | Gap | Severity                                                                                                          | Blocks |
 |-----|-------------------------------------------------------------------------------------------------------------------|--------|
-| All institutes' fee payments settle into the platform's own Razorpay account, not the owner's | 🟢 FIXED — Task F.3, [PR #46](https://github.com/bedantsharma/BatchBook/pull/46), working on task F.4 and further | Was: onboarding any real second paying owner; regulatory exposure (RBI Payment Aggregator rules) |
-| No Razorpay webhook handler — payment status is 100% manual via `PATCH /fee/record/{id}/pay` | 🟢 FIXED — Task F.4, code-complete 2026-07-03, not yet a PR or smoke-tested                                       | Was: reliable fee status, auto `fee_receipt` WATI send (Task D.2) |
+| All institutes' fee payments settle into the platform's own Razorpay account, not the owner's | 🟢 FIXED — Task F.3, [PR #46](https://github.com/bedantsharma/BatchBook/pull/46), F.4/F.5 code-complete in [PR #48](https://github.com/bedantsharma/BatchBook/pull/48), working on F.6/F.7 | Was: onboarding any real second paying owner; regulatory exposure (RBI Payment Aggregator rules) |
+| No Razorpay webhook handler — payment status is 100% manual via `PATCH /fee/record/{id}/pay` | 🟢 FIXED — Task F.4, code-complete 2026-07-03, open in [PR #48](https://github.com/bedantsharma/BatchBook/pull/48), not yet smoke-tested                                       | Was: reliable fee status, auto `fee_receipt` WATI send (Task D.2) |
 | No CI/CD pipeline | 🟡 HIGH                                                                                                           | Safe deployments |
 | Owner header stats not wired | 🟡 HIGH                                                                                                           | UX completeness |
 | Student Batches/Schedule/Fees tabs greyed out | 🟡 HIGH                                                                                                           | Student app completeness |
@@ -73,7 +73,7 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 | **B** | Landing page (real marketing page + WATI website URL) | ✅ DONE — deployed at batchbookui.vercel.app |
 | **C** | Deployment — hosting, domain, SSL, CI/CD | 🟡 PARTIAL — C.1 ✅ C.2 ✅ C.3 ✅ C.4 ✅ · C.5 (smoke test) remaining |
 | **D** | WhatsApp notifications via Meta Cloud API direct (fee reminders, absence alerts) | ✅ DONE — D.0 ✅ D.1 ✅ D.2 ✅ D.3 ✅ · PRs open: BatchBook #33 + batchbookui #26 |
-| **F** | Multi-tenant payments — owner brings their own Razorpay account (BYO keys) + per-tenant webhooks | 🟡 IN PROGRESS — F.1 ✅ F.2 ✅ F.3 ✅ F.3b ✅ F.4 ✅ F.5 ✅ (F.3/F.3b: [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge; F.2, F.4, F.5 code-complete, not yet a PR) · F.6–F.7 remaining |
+| **F** | Multi-tenant payments — owner brings their own Razorpay account (BYO keys) + per-tenant webhooks | 🟡 IN PROGRESS — F.1 ✅ F.2 ✅ F.3 ✅ F.3b ✅ F.4 ✅ F.5 ✅ (F.3/F.3b: [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge; F.2/F.4/F.5: [PR #48](https://github.com/bedantsharma/BatchBook/pull/48) + [batchbookui #39](https://github.com/bedantsharma/batchbookui/pull/39), both open) · F.6–F.7 remaining |
 | **E** | Polish — multi-child, streak, receipts, E2E CI | ⬜ NOT-STARTED |
 | **S** | Pre-scaling hardening — local JWT verify, connection pooling, prod DB config, Render redundancy | 🟡 PARTIAL — S.1 ✅ S.3 ✅ S.5 ✅ · S.2 pool config ✅ Supavisor switch future · S.4 docs ✅ 2nd instance future |
 
@@ -82,7 +82,7 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 - Phase B second: landing page serves double duty — WATI needs a URL, owners need a place to find you
 - Phase C third: now you have something worth deploying
 - Phase D next up: Meta verification is approved, no external dependency left — implement whenever convenient
-- **Phase F before onboarding any second real paying owner** — F.1–F.5 are code-complete ([PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge for F.3/F.3b; F.2, F.4, F.5 not yet a PR), closing the "money settles into your account, not theirs" gap, adding automatic webhook-based payment confirmation, and detecting rotated/revoked keys; F.6 (subscription billing) and F.7 (e2e test) remain before this is fully done.
+- **Phase F before onboarding any second real paying owner** — F.1–F.5 are code-complete ([PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge for F.3/F.3b; F.2/F.4/F.5 open in [PR #48](https://github.com/bedantsharma/BatchBook/pull/48) + [batchbookui #39](https://github.com/bedantsharma/batchbookui/pull/39)), closing the "money settles into your account, not theirs" gap, adding automatic webhook-based payment confirmation, and detecting rotated/revoked keys; F.6 (subscription billing) and F.7 (e2e test) remain before this is fully done.
 - Phase E ongoing: polish after real users give feedback
 
 ---
@@ -96,7 +96,7 @@ agents can write any actions required by the owner here
 | Action | Unblocks |
 |--------|---------|
 | Merge [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) and set `FRONTEND_BASE_URL` / `ADMIN_BACKFILL_SECRET` / `ENABLE_SCHEDULER` in Render's env vars | Institute-scoped payment links, success callback, and the backfill job going live (Tasks F.3–F.3b) |
-| Open PRs for the code-complete F.2/F.4/F.5 work on this branch, then build subscription billing (F.6) and run the e2e test (F.7) | Safe onboarding of any real second paying owner |
+| Review/merge [PR #48](https://github.com/bedantsharma/BatchBook/pull/48) + [batchbookui #39](https://github.com/bedantsharma/batchbookui/pull/39) (F.2/F.4/F.5), then manually smoke-test key-rotation detection with a real Razorpay test-mode key before building subscription billing (F.6) and the e2e test (F.7) | Safe onboarding of any real second paying owner |
 
 ---
 

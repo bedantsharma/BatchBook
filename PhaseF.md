@@ -49,9 +49,9 @@ Open questions from the decision doc are now resolved:
 - [x] On Settings save: reject keys that don't start with `rzp_live_` (covers `rzp_test_` and anything else) with a `400` explaining test-mode payments won't settle anywhere real — `InstituteService.connect_razorpay()` in `services/institute_service.py`
 - [x] Run a lightweight Razorpay API call (`client.payment.all({"count": 1})`, via `asyncio.to_thread`) with the submitted keys before saving, to confirm they authenticate; `razorpay.errors.BadRequestError` → `InvalidRazorpayCredentialsError` → `400` in `routes/owner_route.py`'s `update_razorpay_payouts`. Previously any syntactically-plausible key was accepted and only failed at the first real payment-link generation attempt
 
-**PR:** [#42](https://github.com/bedantsharma/BatchBook/pull/42), [#43](https://github.com/bedantsharma/BatchBook/pull/43), key-prefix/liveness validation (this branch, not yet a PR)
+**PR:** [#42](https://github.com/bedantsharma/BatchBook/pull/42), [#43](https://github.com/bedantsharma/BatchBook/pull/43), key-prefix/liveness validation ([#48](https://github.com/bedantsharma/BatchBook/pull/48), open)
 
-**Verified by:** _(bedant sharma — encryption + masking merged and live; key-prefix/liveness validation code-complete 2026-07-03, 323/323 backend tests passing, pending PR + manual smoke test with a real test-mode key)_
+**Verified by:** _(bedant sharma — encryption + masking merged and live; key-prefix/liveness validation code-complete 2026-07-03, pending PR #48 merge + manual smoke test with a real test-mode key)_
 
 ---
 
@@ -100,7 +100,9 @@ Open questions from the decision doc are now resolved:
 
 **Not built:** no frontend UI yet for the owner to see/paste the webhook secret in Settings → Payouts (F.1's Payouts page only has Key ID/Secret fields today) — needed before an owner can actually turn this on
 
-**Verified by:** _(code-complete 2026-07-03, not yet a PR; no manual smoke test against a real Razorpay test-mode webhook yet)_
+**PR:** [#48](https://github.com/bedantsharma/BatchBook/pull/48) (open)
+
+**Verified by:** _(code-complete 2026-07-03, pending PR #48 merge; no manual smoke test against a real Razorpay test-mode webhook yet)_
 
 ---
 
@@ -109,7 +111,9 @@ Open questions from the decision doc are now resolved:
 - [x] On any `generate_payment_link()` auth failure against an institute's stored keys, flip `Institute` payout status to `Needs reconnect` — `InstituteService.flag_needs_reconnect()`, wired into both the manual `GET /fee/record/{id}/payment-link` route and the scheduled `backfill_missing_payment_links` sweep (which also skips that institute's remaining records for the rest of the sweep instead of retrying each one against the same bad keys)
 - [x] Add a manual "Test connection" button in Settings that re-validates the stored keys on demand — `InstituteService.test_razorpay_connection()` + `POST /owner/institute/payouts/test-connection`; flips `NEEDS_RECONNECT` back to `CONNECTED` on success
 
-**Verified by:** _(code-complete 2026-07-04, not yet a PR; no manual smoke test yet against a real Razorpay test-mode key rotation)_
+**PR:** [#48](https://github.com/bedantsharma/BatchBook/pull/48) (backend, open) + [#39](https://github.com/bedantsharma/batchbookui/pull/39) (frontend, open)
+
+**Verified by:** _(code-complete 2026-07-04, pending PR merge; no manual smoke test yet against a real Razorpay test-mode key rotation)_
 
 ---
 
