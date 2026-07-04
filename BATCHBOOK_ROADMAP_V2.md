@@ -150,3 +150,6 @@ npx playwright test
 | 🟡 PARTIAL | Some sub-tasks done, others missing |
 | ⬜ NOT-STARTED | Not touched |
 | 🚫 BLOCKED | Waiting on external credential or decision |
+## Key Point for Future AI
+
+The `batchbookui/` folder inside `BatchBook/` is a **git submodule**, not a regular directory. BatchBook's git only stores a pointer (a specific commit SHA) to the batchbookui repo — it does not own or track the UI files directly. Any changes inside `batchbookui/` must be committed and pushed from within that folder using its own git identity. Then the submodule pointer in BatchBook must be updated with a separate commit.
