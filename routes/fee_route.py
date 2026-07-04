@@ -2,6 +2,7 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
+import razorpay
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from loguru import logger
 from sqlalchemy import select
@@ -400,6 +401,13 @@ async def get_payment_link(
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except razorpay.errors.BadRequestError:
+        await institute_service.flag_needs_reconnect(db, institute_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Razorpay rejected these credentials — your keys may have been "
+            "rotated or revoked. Reconnect in Settings → Payouts.",
+        )
     except Exception as e:
         logger.error(e)
         raise HTTPException(
