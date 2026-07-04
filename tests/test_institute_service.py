@@ -249,3 +249,140 @@ async def test_set_webhook_secret_raises_when_no_institute(service, mock_db):
             await service.set_webhook_secret(
                 mock_db, owner_id=999, webhook_secret="whsec_x"
             )
+
+
+# --- flag_needs_reconnect ---
+
+
+async def test_flag_needs_reconnect_updates_status(service, mock_db):
+    existing = _make_institute(owner_id=4)
+    existing.razorpay_status = RazorpayStatus.CONNECTED
+    updated = _make_institute(owner_id=4)
+    updated.razorpay_status = RazorpayStatus.NEEDS_RECONNECT
+    update_mock = AsyncMock(return_value=updated)
+
+    with (
+        patch.object(service.institute_repo, "get_by_id", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "update", new=update_mock),
+    ):
+        result = await service.flag_needs_reconnect(mock_db, institute_id=10)
+
+    assert result is updated
+    update_mock.assert_called_once_with(
+        mock_db, existing, {"razorpay_status": RazorpayStatus.NEEDS_RECONNECT}
+    )
+
+
+async def test_flag_needs_reconnect_is_noop_when_already_flagged(service, mock_db):
+    existing = _make_institute(owner_id=4)
+    existing.razorpay_status = RazorpayStatus.NEEDS_RECONNECT
+    update_mock = AsyncMock()
+
+    with (
+        patch.object(service.institute_repo, "get_by_id", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "update", new=update_mock),
+    ):
+        result = await service.flag_needs_reconnect(mock_db, institute_id=10)
+
+    assert result is existing
+    update_mock.assert_not_called()
+
+
+async def test_flag_needs_reconnect_returns_none_when_institute_missing(service, mock_db):
+    with patch.object(service.institute_repo, "get_by_id", new=AsyncMock(return_value=None)):
+        result = await service.flag_needs_reconnect(mock_db, institute_id=999)
+
+    assert result is None
+
+
+# --- test_razorpay_connection ---
+
+
+async def test_test_connection_flips_needs_reconnect_to_connected_on_success(service, mock_db):
+    existing = _make_institute(owner_id=4)
+    existing.razorpay_status = RazorpayStatus.NEEDS_RECONNECT
+    existing.razorpay_key_id = "rzp_live_abc123"
+    existing.razorpay_key_secret_encrypted = "encrypted-blob"
+    updated = _make_institute(owner_id=4)
+    updated.razorpay_status = RazorpayStatus.CONNECTED
+    update_mock = AsyncMock(return_value=updated)
+
+    with (
+        patch.object(service.institute_repo, "get_by_owner_id", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "update", new=update_mock),
+        patch("services.institute_service.decrypt_secret", return_value="plainsecret"),
+        patch("services.institute_service.razorpay.Client") as mock_client_cls,
+    ):
+        mock_client_cls.return_value.payment.all.return_value = {"items": []}
+        result = await service.test_razorpay_connection(mock_db, owner_id=4)
+
+    assert result is updated
+    mock_client_cls.assert_called_once_with(auth=("rzp_live_abc123", "plainsecret"))
+    update_mock.assert_called_once_with(
+        mock_db, existing, {"razorpay_status": RazorpayStatus.CONNECTED}
+    )
+
+
+async def test_test_connection_noop_when_already_connected_and_still_valid(service, mock_db):
+    existing = _make_institute(owner_id=4)
+    existing.razorpay_status = RazorpayStatus.CONNECTED
+    existing.razorpay_key_id = "rzp_live_abc123"
+    existing.razorpay_key_secret_encrypted = "encrypted-blob"
+    update_mock = AsyncMock()
+
+    with (
+        patch.object(service.institute_repo, "get_by_owner_id", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "update", new=update_mock),
+        patch("services.institute_service.decrypt_secret", return_value="plainsecret"),
+        patch("services.institute_service.razorpay.Client") as mock_client_cls,
+    ):
+        mock_client_cls.return_value.payment.all.return_value = {"items": []}
+        result = await service.test_razorpay_connection(mock_db, owner_id=4)
+
+    assert result is existing
+    update_mock.assert_not_called()
+
+
+async def test_test_connection_flips_connected_to_needs_reconnect_on_auth_failure(service, mock_db):
+    import razorpay
+
+    existing = _make_institute(owner_id=4)
+    existing.razorpay_status = RazorpayStatus.CONNECTED
+    existing.razorpay_key_id = "rzp_live_abc123"
+    existing.razorpay_key_secret_encrypted = "encrypted-blob"
+    updated = _make_institute(owner_id=4)
+    updated.razorpay_status = RazorpayStatus.NEEDS_RECONNECT
+    update_mock = AsyncMock(return_value=updated)
+
+    with (
+        patch.object(service.institute_repo, "get_by_owner_id", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "update", new=update_mock),
+        patch("services.institute_service.decrypt_secret", return_value="plainsecret"),
+        patch("services.institute_service.razorpay.Client") as mock_client_cls,
+    ):
+        mock_client_cls.return_value.payment.all.side_effect = razorpay.errors.BadRequestError(
+            "Authentication failed"
+        )
+        result = await service.test_razorpay_connection(mock_db, owner_id=4)
+
+    assert result is updated
+    update_mock.assert_called_once_with(
+        mock_db, existing, {"razorpay_status": RazorpayStatus.NEEDS_RECONNECT}
+    )
+
+
+async def test_test_connection_raises_when_no_institute(service, mock_db):
+    with patch.object(service.institute_repo, "get_by_owner_id", new=AsyncMock(return_value=None)):
+        with pytest.raises(ValueError, match="No institute found"):
+            await service.test_razorpay_connection(mock_db, owner_id=999)
+
+
+async def test_test_connection_raises_when_no_credentials_saved(service, mock_db):
+    existing = _make_institute(owner_id=4)
+    existing.razorpay_key_id = None
+    existing.razorpay_key_secret_encrypted = None
+
+    with patch.object(service.institute_repo, "get_by_owner_id", new=AsyncMock(return_value=existing)):
+        with pytest.raises(ValueError, match="No Razorpay credentials saved"):
+            await service.test_razorpay_connection(mock_db, owner_id=4
+            )
