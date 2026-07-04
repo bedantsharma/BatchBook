@@ -1,4 +1,4 @@
-## PHASE F — Multi-Tenant Payment Settlement (Bring-Your-Own Razorpay Account) 🟡 IN PROGRESS (F.1–F.4 built, F.5–F.7 remaining)
+## PHASE F — Multi-Tenant Payment Settlement (Bring-Your-Own Razorpay Account) 🟡 IN PROGRESS (F.1–F.5 built, F.6–F.7 remaining)
 
 **Why this phase exists:** `clients/razorpay_client.py` builds one global `razorpay.Client` from your personal `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`, and `fee_service.py: generate_payment_link()` uses that same client for every institute's fee records. **Every parent payment, for every owner, currently settles into your own Razorpay account, not the owner's.** Fine for a single pilot institute (yours); breaks the moment a second real owner signs up — you'd be holding other people's tuition money and manually forwarding it, which is an operational headache and a real regulatory question under RBI's Payment Aggregator (PA-PG) rules.
 
@@ -104,12 +104,12 @@ Open questions from the decision doc are now resolved:
 
 ---
 
-### Task F.5 — Key rotation/revocation detection
+### Task F.5 — Key rotation/revocation detection ✅ DONE (pending PR + manual smoke test)
 
-- [ ] On any `generate_payment_link()` auth failure against an institute's stored keys, flip `Institute` payout status to `Needs reconnect` and surface that state clearly in Settings
-- [ ] Add a manual "Test connection" button in Settings that re-validates the stored keys on demand (reuses the Task F.2 validation call)
+- [x] On any `generate_payment_link()` auth failure against an institute's stored keys, flip `Institute` payout status to `Needs reconnect` — `InstituteService.flag_needs_reconnect()`, wired into both the manual `GET /fee/record/{id}/payment-link` route and the scheduled `backfill_missing_payment_links` sweep (which also skips that institute's remaining records for the rest of the sweep instead of retrying each one against the same bad keys)
+- [x] Add a manual "Test connection" button in Settings that re-validates the stored keys on demand — `InstituteService.test_razorpay_connection()` + `POST /owner/institute/payouts/test-connection`; flips `NEEDS_RECONNECT` back to `CONNECTED` on success
 
-**Verified by:** _(pending)_
+**Verified by:** _(code-complete 2026-07-04, not yet a PR; no manual smoke test yet against a real Razorpay test-mode key rotation)_
 
 ---
 
