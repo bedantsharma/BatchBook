@@ -131,3 +131,31 @@ async def test_institute_id_filter_scopes_to_one_institute(db_session):
 
     assert len(rows) == 1
     assert rows[0][0].id == record_a.id
+
+
+# ─── get_record_by_payment_link ────────────────────────────────────────────────
+
+
+async def test_get_record_by_payment_link_returns_matching_record(db_session):
+    repo = FeeRepository()
+    institute = await _seed_institute(db_session)
+    record = await _seed_fee_record(
+        db_session, institute, date(2026, 6, 1), payment_link="https://rzp.io/i/abc123"
+    )
+
+    found = await repo.get_record_by_payment_link(db_session, "https://rzp.io/i/abc123")
+
+    assert found is not None
+    assert found.id == record.id
+
+
+async def test_get_record_by_payment_link_returns_none_when_no_match(db_session):
+    repo = FeeRepository()
+    institute = await _seed_institute(db_session)
+    await _seed_fee_record(
+        db_session, institute, date(2026, 6, 1), payment_link="https://rzp.io/i/abc123"
+    )
+
+    found = await repo.get_record_by_payment_link(db_session, "https://rzp.io/i/does-not-exist")
+
+    assert found is None

@@ -2,6 +2,7 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
+import razorpay
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from loguru import logger
 from sqlalchemy import select
@@ -240,12 +241,6 @@ async def mark_payment(
     When the fee becomes FULLY_PAID, a WhatsApp fee_receipt is sent to the parent
     in the background.
     """
-    from models.batch_base import BatchSchema
-    from models.fee_record_base import FeeStatus
-    from models.parent_base import ParentSchema
-    from models.student_base import StudentSchema
-    from services.notification_service import send_fee_receipt
-
     institute_id = await _resolve_institute_id(
         db, owner_user_id, owner_service, institute_service
     )
@@ -279,28 +274,7 @@ async def mark_payment(
         logger.error(e)
         raise HTTPException(status_code=500, detail="Failed to record payment — check logs")
 
-    if updated.status == FeeStatus.FULLY_PAID:
-        try:
-            student_result = await db.execute(
-                select(StudentSchema, ParentSchema, BatchSchema)
-                .join(ParentSchema, StudentSchema.parent_id == ParentSchema.id, isouter=True)
-                .join(BatchSchema, BatchSchema.id == enrollment.batch_id)
-                .where(StudentSchema.id == enrollment.student_id)
-            )
-            row = student_result.first()
-            if row:
-                student, parent, batch = row
-                if parent and parent.phone_number:
-                    background_tasks.add_task(
-                        send_fee_receipt,
-                        parent_phone=parent.phone_number,
-                        student_name=student.name or "Student",
-                        amount=float(updated.amount_paid),
-                        batch_name=batch.name,
-                        paid_on=updated.paid_at.strftime("%d %b %Y") if updated.paid_at else "",
-                    )
-        except Exception as e:
-            logger.error(f"Failed to queue fee receipt notification: {e}")
+    await fee_service.notify_fee_receipt_if_fully_paid(db, background_tasks, updated)
 
     return updated
 
@@ -427,6 +401,13 @@ async def get_payment_link(
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except razorpay.errors.BadRequestError:
+        await institute_service.flag_needs_reconnect(db, institute_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Razorpay rejected these credentials — your keys may have been "
+            "rotated or revoked. Reconnect in Settings → Payouts.",
+        )
     except Exception as e:
         logger.error(e)
         raise HTTPException(

@@ -312,6 +312,137 @@ async def test_mark_payment_raises_on_negative_amount():
         await svc.mark_payment(db=db, record_id=1, amount_paid=Decimal("-10"))
 
 
+# ---------------------------------------------------------------------------
+# get_record_by_payment_link
+# ---------------------------------------------------------------------------
+
+
+async def test_get_record_by_payment_link_delegates_to_repo():
+    svc = FeeService()
+    db = MagicMock()
+    record = _make_fee_record()
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_record_by_payment_link = AsyncMock(return_value=record)
+
+    result = await svc.get_record_by_payment_link(db, "https://rzp.io/i/abc123")
+
+    svc.fee_repo.get_record_by_payment_link.assert_called_once_with(
+        db, "https://rzp.io/i/abc123"
+    )
+    assert result == record
+
+
+# ---------------------------------------------------------------------------
+# notify_fee_receipt_if_fully_paid
+# ---------------------------------------------------------------------------
+
+
+async def test_notify_fee_receipt_skips_when_not_fully_paid():
+    svc = FeeService()
+    db = MagicMock()
+    background_tasks = MagicMock()
+    record = _make_fee_record(status=FeeStatus.PARTIALLY_PAID)
+
+    await svc.notify_fee_receipt_if_fully_paid(db, background_tasks, record)
+
+    background_tasks.add_task.assert_not_called()
+    db.execute.assert_not_called()
+
+
+async def test_notify_fee_receipt_queues_task_when_fully_paid(db_session):
+    """Integration test: seeds real Student/Parent/Enrollment/Batch rows so the
+    join inside notify_fee_receipt_if_fully_paid is actually exercised."""
+    import secrets
+    import string
+    from datetime import time
+    from uuid import uuid4
+
+    from models.batch_base import BatchSchema, BatchStatus
+    from models.enrollment_base import EnrollmentSchema
+    from models.institute_base import InstituteSchema
+    from models.owner_base import OwnerSchema
+    from models.parent_base import ParentSchema
+    from models.student_base import StudentSchema
+
+    owner = OwnerSchema(name="Owner", phone_number=f"9{uuid4().int % 10**9:09d}", teacher_id=uuid4())
+    db_session.add(owner)
+    await db_session.flush()
+
+    join_code = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+    institute = InstituteSchema(owner_id=owner.id, name="Test", city="Delhi", join_code=join_code)
+    db_session.add(institute)
+    await db_session.flush()
+
+    parent = ParentSchema(
+        name="Parent", phone_number=f"8{uuid4().int % 10**9:09d}", institute_id=institute.id
+    )
+    db_session.add(parent)
+    await db_session.flush()
+
+    batch = BatchSchema(
+        institute_id=institute.id,
+        name="Maths Batch",
+        subject="Maths",
+        start_time=time(9, 0),
+        end_time=time(10, 0),
+        days_of_week=["MON"],
+        max_capacity=30,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 12, 31),
+        status=BatchStatus.ACTIVE,
+    )
+    db_session.add(batch)
+    await db_session.flush()
+
+    student = StudentSchema(name="Rahul", parent_id=parent.id, institute_id=institute.id)
+    db_session.add(student)
+    await db_session.flush()
+
+    enrollment = EnrollmentSchema(
+        student_id=student.id, batch_id=batch.id, due_day=1, is_active=True
+    )
+    db_session.add(enrollment)
+    await db_session.commit()
+    await db_session.refresh(enrollment)
+
+    record = _make_fee_record(
+        enrollment_id=enrollment.id,
+        amount_paid=Decimal("1500.00"),
+        status=FeeStatus.FULLY_PAID,
+    )
+    record.paid_at = datetime(2026, 6, 15)
+
+    svc = FeeService()
+    background_tasks = MagicMock()
+
+    with patch("services.notification_service.send_fee_receipt", new=AsyncMock()) as mock_send:
+        await svc.notify_fee_receipt_if_fully_paid(db_session, background_tasks, record)
+
+    background_tasks.add_task.assert_called_once()
+    call_args = background_tasks.add_task.call_args
+    assert call_args[0][0] is mock_send
+    assert call_args[1]["parent_phone"] == parent.phone_number
+    assert call_args[1]["student_name"] == "Rahul"
+    assert call_args[1]["amount"] == 1500.0
+    assert call_args[1]["batch_name"] == "Maths Batch"
+    assert call_args[1]["paid_on"] == "15 Jun 2026"
+
+
+async def test_notify_fee_receipt_swallows_errors(db_session):
+    """A DB/query failure while resolving student/parent must not raise —
+    it's a best-effort notification, not part of the payment-confirmation contract."""
+    svc = FeeService()
+    background_tasks = MagicMock()
+    record = _make_fee_record(status=FeeStatus.FULLY_PAID, enrollment_id=999999)
+
+    # No such enrollment seeded — the join returns no row, which is handled
+    # gracefully (no task queued), not raised.
+    await svc.notify_fee_receipt_if_fully_paid(db_session, background_tasks, record)
+
+    background_tasks.add_task.assert_not_called()
+
+
 async def test_mark_payment_overpayment_sets_fully_paid():
     """Overpayment (amount_paid > amount_due) should still set FULLY_PAID."""
     svc = FeeService()
@@ -685,3 +816,44 @@ async def test_backfill_passes_institute_id_filter_through():
     svc.fee_repo.get_records_missing_payment_link_for_month.assert_called_once_with(
         db, date(2026, 6, 1), 42
     )
+
+
+async def test_backfill_flags_institute_and_skips_remaining_on_auth_failure():
+    import razorpay
+
+    svc = FeeService()
+    db = MagicMock()
+
+    institute = _make_backfill_institute(institute_id=10)
+    other_institute = _make_backfill_institute(institute_id=20)
+    record1 = _make_fee_record(record_id=1)
+    record2 = _make_fee_record(record_id=2)  # same institute as record1 — must be skipped
+    record3 = _make_fee_record(record_id=3)  # different institute — must still succeed
+
+    svc.fee_repo = MagicMock()
+    svc.fee_repo.get_records_missing_payment_link_for_month = AsyncMock(
+        return_value=[
+            (record1, institute),
+            (record2, institute),
+            (record3, other_institute),
+        ]
+    )
+    svc.generate_payment_link = AsyncMock(
+        side_effect=[razorpay.errors.BadRequestError("Authentication failed"), {}]
+    )
+
+    mock_institute_service = MagicMock()
+    mock_institute_service.flag_needs_reconnect = AsyncMock()
+
+    with (
+        patch("clients.razorpay_client.build_institute_razorpay_client", return_value=MagicMock()),
+        patch("services.institute_service.InstituteService", return_value=mock_institute_service),
+    ):
+        summary = await svc.backfill_missing_payment_links(
+            db=db, institute_id=None, month=date(2026, 6, 1)
+        )
+
+    assert summary["generated"] == 1
+    assert summary["failed"] == 2
+    mock_institute_service.flag_needs_reconnect.assert_called_once_with(db, 10)
+    assert svc.generate_payment_link.call_count == 2  # record2 was never attempted

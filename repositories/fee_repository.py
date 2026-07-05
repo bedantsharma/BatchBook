@@ -76,6 +76,14 @@ class FeeRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_record_by_payment_link(
+        self, db: AsyncSession, payment_link: str
+    ) -> FeeRecordSchema | None:
+        result = await db.execute(
+            select(FeeRecordSchema).where(FeeRecordSchema.payment_link == payment_link)
+        )
+        return result.scalar_one_or_none()
+
     async def get_record_by_enrollment_and_month(
         self, db: AsyncSession, enrollment_id: int, month: date
     ) -> FeeRecordSchema | None:
