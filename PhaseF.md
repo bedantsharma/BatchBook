@@ -12,7 +12,7 @@ Route + Linked Accounts (the original plan) was abandoned after two findings: (1
 
 Open questions from the decision doc are now resolved:
 - **Platform fee model:** flat subscription instead of a per-transaction cut (Route's auto-split is gone since money never touches a BatchBook-controlled account) — ₹700/month up to 50 students, ₹15/student above that headcount.
-- **Website requirement:** confirmed via Razorpay's own FAQ — no website is required to generate live API keys or use Payment Links.
+- **Website requirement (revised 2026-07-05):** Razorpay's FAQ says no website is required to *use Payment Links*, but that turned out not to be the whole picture for *generating live API keys* specifically — see Task F.2b below, which was discovered directly from the pilot institute's own onboarding attempt and contradicts this line as originally written.
 - **PA-PG scope:** confirmed by analogy to an existing BYO-keys model the user has direct experience with at their day job — same pattern, same conclusion (outside PA-PG scope).
 - **Onboarding UX:** KYC is fully offloaded to Razorpay's own (reportedly painless) onboarding flow; BatchBook's job is just a guided Settings page explaining what the owner is about to do, not replicating any part of KYC itself.
 
@@ -52,6 +52,21 @@ Open questions from the decision doc are now resolved:
 **PR:** [#42](https://github.com/bedantsharma/BatchBook/pull/42), [#43](https://github.com/bedantsharma/BatchBook/pull/43), key-prefix/liveness validation ([#48](https://github.com/bedantsharma/BatchBook/pull/48), open)
 
 **Verified by:** _(bedant sharma — encryption + masking merged and live; key-prefix/liveness validation code-complete 2026-07-03, pending PR #48 merge + manual smoke test with a real test-mode key)_
+
+---
+
+### Task F.2b — Unblock live API key generation via website approval 🟡 IN PROGRESS
+
+**Why:** F.2 assumed an owner could generate live keys as soon as KYC was activated and simply paste them into Settings. The pilot institute's own onboarding attempt (2026-07-05) showed that's not the whole gate: with KYC already activated, Razorpay still blocked live key generation with **"Your key access is restricted... Your API key allows your website to securely accept payments via Razorpay. You will be able to generate API keys once your website is approved."** — plus a requirement that the website's product/service clearly reads as **Education** category. This is a separate approval step from KYC, and it affects every future owner going through Task F.7's real-onboarding step, not just the pilot.
+
+- [x] Diagnosed the exact block (Razorpay dashboard message + Education-category requirement)
+- [x] Built a genuine, accurate single-page website for the pilot institute (Bedant Classes) — real name, address, phone, email, a description of the Chemistry/Class 11–12 tuition offered, ₹3,000/month fee, plus Refund & Cancellation Policy, Terms & Conditions, Privacy Policy, and Grievance Redressal sections. Content is real, not a fabricated stub — Razorpay can revoke access later if it detects misrepresentation, and an obviously-templated page shared across many merchants is exactly the pattern payment-aggregator compliance teams flag
+- [x] Deployed standalone at `https://bedant-classes.batchbook.in` — a separate Vercel project (`pilot-institute-site`), not a route inside `batchbookui`. Two concrete reasons: `batchbookui` is a pure client-rendered SPA (`vercel.json` rewrites every path to `/index.html`, so a React route would serve an empty shell to any automated scrape), and its root page (`LandingPage.jsx`) markets BatchBook itself as SaaS software — a direct category/identity mismatch if nested there. CNAME added in Namecheap, HTTPS auto-issued and verified, all required content confirmed present in the raw HTML (not just browser-rendered)
+- [x] Submitted `https://bedant-classes.batchbook.in` to Razorpay for website approval (2026-07-05)
+- [ ] Confirm live API key generation actually unblocks — **pending Razorpay's review**
+- [ ] If validated: scope **Task F.8** — an automated per-institute subdomain page generator for every future owner (new `slug`/`address`/`phone`/`email`/`description` columns on `Institute` via Alembic migration, a new unauthenticated `GET /public/institute/{slug}` endpoint, wildcard DNS + Vercel domain, `app.py`'s CORS switched from its static `allow_origins` list to `allow_origin_regex`), so nobody has to hand-build a page per owner going forward
+
+**Verified by:** _(pending — submitted 2026-07-05, awaiting Razorpay's website-approval decision)_
 
 ---
 
