@@ -61,150 +61,16 @@ This project is indexed by GitNexus as **BatchBook** (4441 symbols, 7367 relatio
 
 ## Repo Layout
 
-```
-BatchBook/                          ← git repo (FastAPI backend)
-├── app.py                          ← FastAPI app entry point; CORS + router registration + Supabase lifespan
-├── config.py                       ← Pydantic Settings (reads .env); get_settings() is lru_cache'd
-├── pyproject.toml                  ← uv/ruff/pytest config + all dependencies
-├── alembic.ini                     ← Alembic migration config
-├── alembic/
-│   └── versions/                   ← Migration history (DO NOT hand-edit)
-├── clients/
-│   └── supabase_client.py          ← Global async Supabase client; get_supabase_client() FastAPI dep
-├── db/
-│   ├── base.py                     ← SQLAlchemy declarative Base
-│   └── session.py                  ← Async engine + AsyncSessionLocal; get_db() FastAPI dep
-├── models/                         ← SQLAlchemy ORM table definitions
-│   ├── student_base.py             ← StudentSchema (table: "Student")
-│   ├── owner_base.py               ← OwnerSchema (table: "Owner")
-│   ├── institute_base.py           ← InstituteSchema (table: "Institute")
-│   └── __init__.py                 ← Imports all models (required for Alembic autogenerate)
-├── DTO/                            ← Pydantic request/response schemas (NOT DB models)
-│   ├── student_model.py            ← Student Pydantic model + StudentFeesStatus enum
-│   └── owner_model.py              ← Owner Pydantic model
-├── repositories/                   ← DB query layer (raw SQLAlchemy, no business logic)
-│   ├── student_repository.py
-│   ├── owner_repository.py
-│   └── institute_repository.py
-├── services/                       ← Business logic layer
-│   ├── auth_service.py             ← get_current_user_id(supabase, authorization) → UUID
-│   ├── student_service.py          ← OTP verify + upsert student + CRUD
-│   ├── owner_service.py            ← OTP verify + upsert owner + CRUD
-│   └── institute_service.py        ← create/get institute; enforces one-per-owner
-├── routes/                         ← FastAPI routers
-│   ├── student_route.py            ← prefix: /student
-│   ├── owner_route.py              ← prefix: /owner
-│   ├── requests/                   ← Pydantic request body schemas
-│   │   ├── otp_generate_request.py
-│   │   ├── otp_verify_request.py
-│   │   ├── owner_verify_otp_request.py
-│   │   ├── refresh_token_request.py
-│   │   ├── update_student_request.py
-│   │   ├── update_owner_request.py
-│   │   └── create_institute_request.py
-│   └── responses/                  ← Pydantic response schemas
-│       ├── verify_user_response.py
-│       ├── verify_owner_response.py
-│       ├── student_profile_response.py
-│       ├── owner_profile_response.py
-│       └── institute_response.py
-├── tests/
-│   ├── conftest.py                 ← Pytest fixtures (test DB, async client)
-│   ├── test_auth_service.py
-│   ├── test_owner_repository.py
-│   ├── test_owner_routes.py
-│   └── test_owner_service.py
-├── docs/superpowers/plans/         ← AI-generated implementation plans
-├── .env                            ← Secrets (NOT committed) — see env vars section below
-├── .gitmodules                     ← Points batchbookui/ to github.com/bedantsharma/batchbookui
-└── batchbookui/                    ← git SUBMODULE (separate repo — see submodule rules below)
-```
+use the gitnexus commands to search for keyword in the repo and if the gitnexus index is stale then reindex it.
+
 
 ---
 
 ## Data Models
 
-### StudentSchema (`models/student_base.py`)
-| Column | Type | Notes |
-|--------|------|-------|
-| id | Integer PK | autoincrement |
-| name | String | |
-| phone_number | String | unique |
-| fees_status | Enum(StudentFeesStatus) | NOT_PAID \| PARTIALLY_PAID \| FULLY_PAID |
-| email | String | nullable |
-| user_id | UUID | unique; links to Supabase Auth |
-| created_at | DateTime | |
+All the models live int he /models folder feel free to look there if needed
 
-> ⚠️ **Phase 1.3 will refactor this.** `phone_number` and `user_id` move to a new `Parent` model. `parent_id` FK replaces them. Do not build new features that depend on student having `phone_number` directly.
 
-### OwnerSchema (`models/owner_base.py`)
-| Column | Type | Notes |
-|--------|------|-------|
-| id | Integer PK | autoincrement |
-| name | String | nullable |
-| phone_number | String | unique, not null |
-| teacher_id | UUID | unique, not null; links to Supabase Auth |
-| email | String | nullable |
-| institute_name | String | nullable (legacy — use InstituteSchema) |
-| city | String | nullable (legacy — use InstituteSchema) |
-| created_at | DateTime | |
-
-### InstituteSchema (`models/institute_base.py`)
-| Column | Type | Notes |
-|--------|------|-------|
-| id | Integer PK | autoincrement |
-| owner_id | Integer FK → Owner.id | unique (one institute per owner) |
-| name | String | not null |
-| city | String | not null |
-| created_at | DateTime | |
-
----
-
-## API Endpoints
-
-### `/student` prefix (`routes/student_route.py`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/student/` | None | Create student directly (admin/internal) |
-| POST | `/student/generate_otp` | None | Send OTP to `+91{phone}` via Supabase |
-| POST | `/student/verify_otp` | None | Verify OTP → upsert student → return JWT + refresh_token |
-| GET | `/student/me` | Bearer JWT | Get authenticated student's profile |
-| POST | `/student/refresh` | None | Exchange refresh_token for new JWT pair |
-| PATCH | `/student/update` | Bearer JWT | Update student fields (name, email, fees_status) |
-
-### `/owner` prefix (`routes/owner_route.py`)
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/owner/generate_otp` | None | Send OTP to `+91{phone}` via Supabase |
-| POST | `/owner/verify_otp` | None | Verify OTP → upsert owner → return JWT + refresh_token |
-| GET | `/owner/me` | Bearer JWT | Get authenticated owner's profile |
-| POST | `/owner/refresh` | None | Exchange refresh_token for new JWT pair |
-| PATCH | `/owner/update` | Bearer JWT | Update owner fields (name, email, institute_name, city) |
-| POST | `/owner/institute` | Bearer JWT | Create institute (one-per-owner enforced; 409 if already exists) |
-| GET | `/owner/institute` | Bearer JWT | Get owner's institute details |
-
-**Auth pattern:** All protected routes use `_get_current_teacher_id` / `_get_current_user_id` as FastAPI `Depends` which calls `auth_service.get_current_user_id(supabase, authorization)` — this hits Supabase's `get_user()` endpoint and returns the UUID.
-
----
-
-## Auth Flow (Supabase OTP)
-
-```
-1. Client → POST /*/generate_otp { phone: "9876543210" }
-2. Backend → Supabase Auth.sign_in_with_otp("+91{phone}") → SMS sent
-3. Client → POST /*/verify_otp { phone, token, name?, email? }
-4. Backend → Supabase Auth.verify_otp({ phone: "+91{phone}", token, type: "sms" })
-5. Backend → upsert record in DB (Student or Owner) using user.id as the UUID key
-6. Returns { auth_token, refresh_token, aud, user_id/teacher_id }
-7. Client stores tokens; sends auth_token as "Authorization: Bearer {token}" on all protected calls
-8. On token expiry → POST /*/refresh { refresh_token } → new token pair
-```
-
-> **TODO in codebase:** `GET /student/me` has a comment to replace `supabase.auth.get_user()` round-trip with local JWT verification using the Supabase JWT secret.
-
----
 
 ## Service Layer Patterns
 
@@ -331,14 +197,18 @@ uv run pytest -v
 
 ```
 PROJECT_NAME=BatchBook
-DATABASE_URL=postgresql+asyncpg://[user]:[password]@[host]/postgres
-SUPABASE_URL=https://[project-id].supabase.co
-SUPABASE_KEY=sb_publishable_[key]
-# Phase 3 additions:
-RAZORPAY_KEY_ID=rzp_test_xxxxx
-RAZORPAY_KEY_SECRET=xxxxxxxx
-WATI_API_ENDPOINT=https://live-mt-server.wati.io/XXXXX
-WATI_API_TOKEN=xxxxxxxx
+DATABASE_URL=XXXXX
+SUPABASE_URL=XXXXX
+SUPABASE_KEY=XXXXX
+RAZORPAY_KEY_ID=XXXXX
+RAZORPAY_KEY_SECRET=XXXXX
+META_WHATSAPP_TOKEN=XXXXX
+META_WHATSAPP_PHONE_NUMBER_ID=XXXXX
+WABA_ID=XXXXX
+RAZORPAY_ENCRYPTION_KEY=XXXXX
+FRONTEND_BASE_URL=XXXXX
+ENABLE_SCHEDULER=XXXXX
+ADMIN_BACKFILL_SECRET=XXXXX
 ```
 
 All config is via `config.py` → `Settings(BaseSettings)`. Add new vars there AND in `.env`.
