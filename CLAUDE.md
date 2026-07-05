@@ -285,86 +285,9 @@ Run `git remote -v` if unsure. The BatchBook remote points to `BatchBook.git`; t
 | Emotion | 11 | CSS-in-JS (MUI dependency) |
 | Lucide React | latest | Icons |
 | Tailwind CSS | via `tw-animate-css` | Utility classes |
-| Firebase | 12 | ⚠️ BEING REMOVED — currently handles phone OTP (see Phase 1.5) |
 
 ---
 
-## Frontend Repo Layout (`batchbookui/`)
-
-```
-batchbookui/
-├── index.html                      ← Vite entry HTML
-├── package.json                    ← npm scripts: dev, build, lint, preview
-├── jsconfig.json                   ← JS paths config
-├── components.json                 ← shadcn/ui config (class-variance-authority present)
-├── eslint.config.js                ← ESLint flat config
-├── public/
-│   ├── favicon.svg
-│   └── icons.svg                   ← SVG icon sprite
-├── src/
-│   ├── main.jsx                    ← React entry point (mounts <App />)
-│   ├── App.jsx                     ← Router + MUI ThemeProvider (dark Material 3 theme)
-│   ├── firebaseconfig.ts           ← ⚠️ Firebase init — DELETE in Phase 1.5
-│   ├── assets/
-│   │   └── hero.png
-│   ├── lib/
-│   │   └── utils.js                ← cn() helper (clsx + tailwind-merge)
-│   ├── components/                 ← Shared/page components (currently flat, not yet split into pages/)
-│   │   ├── PhoneLogin.jsx          ← Phone number input → Firebase signInWithPhoneNumber (TO BE REPLACED with Supabase)
-│   │   ├── OtpVerification.jsx     ← 6-digit OTP input → Firebase confirmationResult.confirm (TO BE REPLACED)
-│   │   └── Dashboard.jsx           ← Student dashboard (3 tabs: Home, Schedule, Profile) — ALL MOCK DATA
-│   └── services/
-│       └── dashboardService.js     ← Mock data service (all TODOs — see Phase 5)
-└── batchbook-design-system/        ← Design tokens, fonts, color previews (read-only reference)
-    └── project/
-        ├── colors_and_type.css     ← CSS variables for colors + typography
-        ├── fonts/                  ← JetBrains Mono TTF files
-        ├── assets/                 ← Logo, icons, hero image
-        ├── preview/                ← HTML previews of design tokens (buttons, cards, OTP, etc.)
-        └── ui_kits/batchbook-app/ ← UI kit reference
-```
-
----
-
-## Frontend Routes (current)
-
-| Path | Component | Status |
-|------|-----------|--------|
-| `/` | `PhoneLogin` | Works (Firebase) — to be migrated to Supabase |
-| `/phone-login` | `PhoneLogin` | Same as above |
-| `/otp-verification` | `OtpVerification` | Works (Firebase) — to be migrated |
-| `/dashboard` | `Dashboard` | Works with mock data only |
-
-**Planned routes (Phase 1.6):**
-- `/owner/setup` — first-time institute setup
-- `/owner/dashboard` — owner main app (sidebar layout)
-
----
-
-## Frontend Theme
-
-Dark Material 3 theme defined in `App.jsx`:
-- **Primary:** `#BB86FC` (purple)
-- **Secondary:** `#03DAC6` (cyan/teal)
-- **Background:** `#121212` / `#1E1E1E`
-- **Font:** `DM Sans` (typography) + `JetBrains Mono` (monospace, from design system)
-- **Border radius:** Cards 16px, Buttons 16px, TextFields 12px
-
----
-
-## Dashboard Mock Data (`services/dashboardService.js`)
-
-All functions return hardcoded data with a 300ms simulated delay. Every function has a `// TODO` comment showing the real API endpoint to wire up in Phase 5:
-
-| Function | Future endpoint |
-|----------|----------------|
-| `getStudentProfile()` | `GET /student/me` |
-| `getAttendance()` | `GET /student/me/attendance?month=YYYY-MM` |
-| `getUpcomingEvents()` | `GET /student/me/upcoming-events?limit=10` |
-| `getTodaySchedule()` | `GET /student/me/schedule?date=YYYY-MM-DD` |
-| `getUnreadNotificationCount()` | `GET /student/me/notifications/unread-count` |
-
----
 
 ## Running the Frontend
 
@@ -429,22 +352,4 @@ ClassSession ────  Attendance (1:many — one per enrolled student per s
 Batch ───────────  TestScore (via Enrollment — Phase 6)
 ```
 
-**Key design decisions:**
-- `Parent` holds phone + Supabase auth. The "student app" is actually a parent app. Siblings share one parent account.
-- `due_day` lives on `Enrollment` (not `FeeStructure`) — students joining mid-month get their own payment cycle.
-- `Batch.status` lifecycle: `ACTIVE → CLOSING` (auto when `end_date` passes) `→ ARCHIVED` (manual, only when all fees settled).
 
----
-
-## Roadmap Phase Summary
-
-| Phase | Focus | Status |
-|-------|-------|--------|
-| 1 | CORS + Owner model + Firebase→Supabase migration + owner dashboard shell | In progress (Tasks 1.1–1.2 done, 1.3–1.6 pending) |
-| 2 | Batch + Enrollment models + frontend batch management UI | Not started |
-| 3 | Fee management (FeeStructure, FeeRecord, Razorpay links, WATI WhatsApp) | Not started |
-| 4 | Attendance (ClassSession, Attendance, absence WhatsApp alerts) | Not started |
-| 5 | Connect student dashboard to real backend (replace all mock data) | Not started |
-| 6 | Tests, performance tracker (test scores), error handling polish | Not started |
-
-See `BATCHBOOK_ROADMAP.md` for the full detailed task breakdown with explanations.
