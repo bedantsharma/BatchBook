@@ -99,6 +99,7 @@ agents can write any actions required by the owner here
 |--------|---------|
 | Merge [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) and set `FRONTEND_BASE_URL` / `ADMIN_BACKFILL_SECRET` / `ENABLE_SCHEDULER` in Render's env vars | Institute-scoped payment links, success callback, and the backfill job going live (Tasks F.3–F.3b) |
 | Review/merge [PR #48](https://github.com/bedantsharma/BatchBook/pull/48) + [batchbookui #39](https://github.com/bedantsharma/batchbookui/pull/39) (F.2/F.4/F.5), then manually smoke-test key-rotation detection with a real Razorpay test-mode key before building subscription billing (F.6) and the e2e test (F.7) | Safe onboarding of any real second paying owner |
+| Run `uv run alembic upgrade head` against the production `DATABASE_URL` before deploying Task F.8's new endpoints to production | `GET /public/institute/{slug}` and `POST /admin/institute/{institute_id}/generate-site` cannot work without the `Institute` schema migration applied to the live database |
 | Decide who writes/tests the Tier 1 self-serve website guide (Task F.8) — Google Sites vs. Carrd walkthrough, and confirm whether Razorpay accepts a subdomain (`xyz.wixsite.com`) or requires an apex custom domain, once a real owner goes through it | Task F.8 — website onboarding for every future owner |
 
 ---
