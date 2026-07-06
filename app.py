@@ -20,6 +20,7 @@ from routes.enrollment_route import router as enrollment_router
 from routes.fee_route import router as fee_router
 from routes.owner_route import router as owner_router
 from routes.parent_route import router as parent_router
+from routes.public_route import router as public_router
 from routes.student_dashboard_route import router as student_dashboard_router
 from routes.student_route import router as student_router
 from routes.teacher_route import router as teacher_router
@@ -116,3 +117,4 @@ app.include_router(router=attendance_router)
 app.include_router(router=admin_router)
 app.include_router(router=test_score_router)
 app.include_router(router=webhook_router)
+app.include_router(router=public_router)
