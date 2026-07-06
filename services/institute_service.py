@@ -1,4 +1,5 @@
 import asyncio
+import re
 import secrets
 import string
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ from models.institute_base import InstituteSchema, RazorpayStatus
 from models.owner_base import OwnerSchema
 from repositories.institute_repository import InstituteRepository
 from services.crypto_service import decrypt_secret
+from services.site_color_presets import resolve_color_scheme
 
 
 class InvalidRazorpayCredentialsError(ValueError):
@@ -216,6 +218,57 @@ class InstituteService:
                 db, institute, {"razorpay_status": RazorpayStatus.CONNECTED}
             )
         return institute
+
+    async def get_public_by_slug(self, db: AsyncSession, slug: str) -> InstituteSchema | None:
+        if not slug:
+            return None
+        return await self.institute_repo.get_by_slug(db, slug)
+
+    async def generate_site(
+        self,
+        db: AsyncSession,
+        institute_id: int,
+        *,
+        slug: str,
+        address: str,
+        phone_public: str,
+        email_public: str,
+        description: str,
+        course_fee_display: str,
+        color_scheme: str | None = None,
+    ) -> InstituteSchema:
+        """Persist Tier 2 site-generator content for an institute (Task F.8).
+
+        Raises:
+            ValueError: If `institute_id` doesn't exist, `slug` isn't URL-safe,
+                `slug` is already taken by a *different* institute, or
+                `color_scheme` isn't one of the fixed presets.
+        """
+        institute = await self.institute_repo.get_by_id(db, institute_id)
+        if not institute:
+            raise ValueError(f"No institute found with id {institute_id}")
+
+        if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", slug):
+            raise ValueError(
+                "slug must be lowercase alphanumeric with hyphens only, e.g. 'bedants-tuition'"
+            )
+
+        existing = await self.institute_repo.get_by_slug(db, slug)
+        if existing is not None and existing.id != institute_id:
+            raise ValueError(f"slug '{slug}' is already in use by another institute")
+
+        resolved_color_scheme = resolve_color_scheme(slug, color_scheme)
+
+        updates = {
+            "slug": slug,
+            "address": address,
+            "phone_public": phone_public,
+            "email_public": email_public,
+            "description": description,
+            "course_fee_display": course_fee_display,
+            "color_scheme": resolved_color_scheme,
+        }
+        return await self.institute_repo.update(db, institute, updates)
 
 
 def get_institute_service() -> InstituteService:
