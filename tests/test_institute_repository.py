@@ -142,3 +142,36 @@ async def test_update_only_changes_specified_fields(db_session, repo, owner_repo
 
     assert institute.name == "Original Name"
     assert institute.city == "New City"
+
+
+# --- public site fields ---
+
+async def test_create_institute_allows_public_site_fields_unset(db_session, repo, owner_repo):
+    owner = await _create_owner(db_session, owner_repo)
+    created = await repo.create(db_session, _institute(owner.id, "Plain Institute", "Delhi", "PLAN0001"))
+
+    assert created.slug is None
+    assert created.color_scheme is None
+
+
+async def test_update_sets_public_site_fields(db_session, repo, owner_repo):
+    owner = await _create_owner(db_session, owner_repo)
+    institute = await repo.create(db_session, _institute(owner.id, "Site Institute", "Jaipur", "SITE0001"))
+
+    updated = await repo.update(
+        db_session,
+        institute,
+        {
+            "slug": "site-institute",
+            "address": "123 MG Road, Jaipur",
+            "phone_public": "9999999999",
+            "email_public": "contact@example.com",
+            "description": "Maths and Science tuition for Class 9-12",
+            "course_fee_display": "Rs 3000/month",
+            "color_scheme": "teal",
+        },
+    )
+
+    assert updated.slug == "site-institute"
+    assert updated.color_scheme == "teal"
+    assert updated.course_fee_display == "Rs 3000/month"
