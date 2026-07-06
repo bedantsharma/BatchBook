@@ -30,6 +30,12 @@ class InstituteRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_slug(self, db: AsyncSession, slug: str) -> InstituteSchema | None:
+        result = await db.execute(
+            select(InstituteSchema).where(InstituteSchema.slug == slug)
+        )
+        return result.scalar_one_or_none()
+
     async def find_by_owner_phone(
         self, db: AsyncSession, owner_phone: str
     ) -> tuple[InstituteSchema, OwnerSchema] | None:
