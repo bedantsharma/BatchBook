@@ -199,3 +199,34 @@ async def test_generate_site_returns_400_on_value_error(client):
         app.dependency_overrides.clear()
 
     assert resp.status_code == 400
+
+
+async def test_generate_site_returns_404_on_no_institute_found(client):
+    from app import app
+
+    institute_svc = MagicMock(spec=InstituteService)
+    institute_svc.generate_site = AsyncMock(
+        side_effect=ValueError("No institute found with id 999")
+    )
+    app.dependency_overrides[get_institute_service] = lambda: institute_svc
+
+    try:
+        with patch("routes.admin_route.get_settings") as mock_settings:
+            mock_settings.return_value.admin_backfill_secret = "s3cr3t"
+
+            resp = await client.post(
+                "/admin/institute/999/generate-site",
+                json={
+                    "slug": "test-slug",
+                    "address": "x",
+                    "phone_public": "9876543210",
+                    "email_public": "hi@example.com",
+                    "description": "x",
+                    "course_fee_display": "x",
+                },
+                headers={"X-Admin-Secret": "s3cr3t"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 404
