@@ -1,3 +1,5 @@
+import zlib
+
 COLOR_PRESETS: dict[str, dict[str, str]] = {
     "indigo": {"primary": "#3730A3", "accent": "#6366F1", "background": "#F5F5FF"},
     "teal": {"primary": "#0F766E", "accent": "#14B8A6", "background": "#F0FDFA"},
@@ -30,4 +32,4 @@ def resolve_color_scheme(slug: str, requested: str | None) -> str:
                 f"'{requested}' is not a valid color scheme — choose one of {PRESET_NAMES}"
             )
         return requested
-    return PRESET_NAMES[hash(slug) % len(PRESET_NAMES)]
+    return PRESET_NAMES[zlib.crc32(slug.encode()) % len(PRESET_NAMES)]
