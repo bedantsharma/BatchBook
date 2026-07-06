@@ -1,4 +1,4 @@
-## PHASE F — Multi-Tenant Payment Settlement (Bring-Your-Own Razorpay Account) 🟡 IN PROGRESS (F.1–F.5 built, F.6–F.7 remaining)
+## PHASE F — Multi-Tenant Payment Settlement (Bring-Your-Own Razorpay Account) 🟡 IN PROGRESS (F.1–F.5 built, F.2b resolved, F.6–F.8 remaining)
 
 **Why this phase exists:** `clients/razorpay_client.py` builds one global `razorpay.Client` from your personal `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`, and `fee_service.py: generate_payment_link()` uses that same client for every institute's fee records. **Every parent payment, for every owner, currently settles into your own Razorpay account, not the owner's.** Fine for a single pilot institute (yours); breaks the moment a second real owner signs up — you'd be holding other people's tuition money and manually forwarding it, which is an operational headache and a real regulatory question under RBI's Payment Aggregator (PA-PG) rules.
 
@@ -55,18 +55,17 @@ Open questions from the decision doc are now resolved:
 
 ---
 
-### Task F.2b — Unblock live API key generation via website approval 🟡 IN PROGRESS
-
+### Task F.2b — Unblock live API key generation via website approval ✅ DONE
 **Why:** F.2 assumed an owner could generate live keys as soon as KYC was activated and simply paste them into Settings. The pilot institute's own onboarding attempt (2026-07-05) showed that's not the whole gate: with KYC already activated, Razorpay still blocked live key generation with **"Your key access is restricted... Your API key allows your website to securely accept payments via Razorpay. You will be able to generate API keys once your website is approved."** — plus a requirement that the website's product/service clearly reads as **Education** category. This is a separate approval step from KYC, and it affects every future owner going through Task F.7's real-onboarding step, not just the pilot.
 
 - [x] Diagnosed the exact block (Razorpay dashboard message + Education-category requirement)
 - [x] Built a genuine, accurate single-page website for the pilot institute (Bedant Classes) — real name, address, phone, email, a description of the Chemistry/Class 11–12 tuition offered, ₹3,000/month fee, plus Refund & Cancellation Policy, Terms & Conditions, Privacy Policy, and Grievance Redressal sections. Content is real, not a fabricated stub — Razorpay can revoke access later if it detects misrepresentation, and an obviously-templated page shared across many merchants is exactly the pattern payment-aggregator compliance teams flag
 - [x] Deployed standalone at `https://bedant-classes.batchbook.in` — a separate Vercel project (`pilot-institute-site`), not a route inside `batchbookui`. Two concrete reasons: `batchbookui` is a pure client-rendered SPA (`vercel.json` rewrites every path to `/index.html`, so a React route would serve an empty shell to any automated scrape), and its root page (`LandingPage.jsx`) markets BatchBook itself as SaaS software — a direct category/identity mismatch if nested there. CNAME added in Namecheap, HTTPS auto-issued and verified, all required content confirmed present in the raw HTML (not just browser-rendered)
 - [x] Submitted `https://bedant-classes.batchbook.in` to Razorpay for website approval (2026-07-05)
-- [ ] Confirm live API key generation actually unblocks — **pending Razorpay's review**
-- [ ] If validated: scope **Task F.8** — an automated per-institute subdomain page generator for every future owner (new `slug`/`address`/`phone`/`email`/`description` columns on `Institute` via Alembic migration, a new unauthenticated `GET /public/institute/{slug}` endpoint, wildcard DNS + Vercel domain, `app.py`'s CORS switched from its static `allow_origins` list to `allow_origin_regex`), so nobody has to hand-build a page per owner going forward
+- [x] Confirm live API key generation actually unblocks — **confirmed 2026-07-06: Razorpay approved the pilot institute's website, live API keys generated successfully**
+- [x] Scoped **Task F.8** (see below) — covers the two-tier website-onboarding approach for every future owner, not just the pilot
 
-**Verified by:** _(pending — submitted 2026-07-05, awaiting Razorpay's website-approval decision)_
+**Verified by:** _(bedant sharma — 2026-07-06, website approved and live keys obtained)_
 
 ---
 
@@ -150,5 +149,33 @@ Open questions from the decision doc are now resolved:
 - [ ] Only after this passes: onboard the first real second owner
 
 **Verified by:** _(pending)_
+
+---
+
+### Task F.8 — Website onboarding for every future owner: guided self-serve first, BatchBook-generated fallback second
+
+**Why:** F.2b confirmed Razorpay requires an approved, Education-category business website before it issues live API keys — this hits every future owner in Task F.7's real-onboarding step, not just the pilot. Two things decided this task's shape (research done 2026-07-06, see chat log):
+
+1. **Third-party site builders are cheap enough that most owners can just self-serve.** Google Sites is free to host with a free custom-domain SSL setup (domain registration only, ~₹1,000–1,300/yr); Carrd is ~$19–34/yr with a custom domain. Either gets a non-technical owner a real one-page business site in roughly 2–5 hours using a template, satisfying Razorpay's required sections (business name, address, phone, email, course description, Refund & Cancellation Policy, Terms & Conditions, Privacy Policy, Grievance Redressal). It's still unconfirmed whether Razorpay accepts a subdomain (`xyz.wixsite.com`) vs. requires an apex custom domain — treat that as untested until one real owner goes through it.
+2. **The "make every generated site look different" idea was solving an unconfirmed risk.** Web research (Reddit, Razorpay's own community forum, consumer-complaint sites, RBI PA-PG directions) turned up real, documented Razorpay account freezes — but every confirmed cause is behavioral: KYC/PAN/GST mismatches, chargebacks/fraud-linked funds, or sudden volume spikes inconsistent with a declared profile. **Nothing anywhere ties a freeze to templated or visually-similar merchant websites.** So the BatchBook-generated fallback (below) only needs a color-only palette, not procedural/structural variation — building that would be effort spent defending against a risk nobody has actually observed.
+
+### Decision: two-tier onboarding (decided 2026-07-06)
+
+- **Tier 1 (default, offer to every new owner first):** a short internal guide pointing the owner at Google Sites or Carrd, with the exact Razorpay-required sections listed out, plus a walkthrough for generating live API keys once the site is approved. No BatchBook engineering involved — just documentation and support.
+- **Tier 2 (fallback, only if the owner won't spend any time or money on a site):** BatchBook auto-generates a page for them on a wildcard subdomain (`{slug}.batchbook.in`), from one shared template varied only by a preset color scheme (~10 options, picked deterministically so ops doesn't have to choose one each time).
+- **Who fills in the Tier 2 site's content:** since a Tier-2 owner by definition won't fill in a form themselves, the content (address, phone, course description, fee) has to come from a real conversation with them (WhatsApp/call — their existing workflow anyway) and be entered on their behalf by BatchBook ops. This mirrors the existing `POST /admin/backfill-payment-links` pattern (Task F.3b) — an admin-only endpoint gated by the same `X-Admin-Secret` header, not a public owner-facing form. A self-serve Settings-page version of the same fields can be added later if demand shows up for owners who want to fill their own details but still have BatchBook host the page — not needed at current scale.
+
+**Checklist:**
+
+- [ ] Alembic migration: add `slug` (unique, nullable), `address`, `phone_public`, `email_public`, `description`, `course_fee_display`, and `color_scheme` (string, validated against a fixed list of ~10 presets) to `Institute`
+- [ ] `GET /public/institute/{slug}` — unauthenticated, returns the above display fields for institutes with a slug set, `404` otherwise
+- [ ] `POST /admin/institute/{institute_id}/generate-site` — admin-only (`X-Admin-Secret`, same env var as the F.3b backfill endpoint), accepts slug + all display fields, writes them to the `Institute` row; auto-assigns `color_scheme` if not given (deterministic pick, e.g. hash of slug mod 10)
+- [ ] Wildcard DNS: `*.batchbook.in` CNAME in Namecheap → Vercel; wildcard domain added to the site-generator's Vercel project
+- [ ] The generator itself: a single small server-rendered app/function (not the existing `batchbookui` SPA — that rewrites every path to `/index.html` and would serve an empty shell to Razorpay's crawler, the same reason F.2b's pilot page was built standalone). Reads the `Host` header, extracts the slug, calls `GET /public/institute/{slug}`, and returns real templated HTML with that institute's data plus the matching color-scheme CSS variables. One deployment serves every institute — no per-institute hosting.
+- [ ] `app.py` CORS: switch from the static `allow_origins` list to `allow_origin_regex` matching `https://.*\.batchbook\.in`, since every generated site is an unpredictable subdomain
+- [ ] Write the Tier 1 self-serve guide: Google Sites/Carrd setup steps, the exact Razorpay-required sections, and how to generate live API keys once approved
+- [ ] Leave the existing pilot page at `bedant-classes.batchbook.in` as-is (already works, no urgency to migrate it onto the shared generator)
+
+**Verified by:** _(pending — scoped 2026-07-06, not yet built)_
 
 ---

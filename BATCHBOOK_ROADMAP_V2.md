@@ -30,7 +30,7 @@
 
 ### What is blocked on external credentials
 - Meta/WhatsApp: nothing — verification (`batchbook.in`) **approved 2026-06-21**. WhatsApp Business Account is live and can send messages. Phase D ready to implement.
-- **Razorpay live API keys** (new, found 2026-07-05): KYC is activated for the pilot institute, but Razorpay separately gates *live API key generation* on an approved business website (Education category) — see `PhaseF.md` Task F.2b. Mitigation deployed same day: a real, accurate one-page site for the pilot institute at `https://bedant-classes.batchbook.in`, submitted to Razorpay for review. **Status: pending Razorpay's decision.**
+- ~~Razorpay live API keys~~ **RESOLVED 2026-07-06** — the pilot institute's website (`https://bedant-classes.batchbook.in`) was approved by Razorpay and live API keys were generated successfully. See `PhaseF.md` Task F.2b. Task F.8 now scopes how every *future* owner gets a qualifying website (guided self-serve first, BatchBook-generated wildcard-subdomain fallback second).
 
 ### Decision: integrate Meta Cloud API directly, skip WATI (decided 2026-06-21)
 
@@ -51,7 +51,7 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 | Gap | Severity                                                                                                          | Blocks |
 |-----|-------------------------------------------------------------------------------------------------------------------|--------|
 | All institutes' fee payments settle into the platform's own Razorpay account, not the owner's | 🟢 FIXED — Task F.3, [PR #46](https://github.com/bedantsharma/BatchBook/pull/46), F.4/F.5 code-complete in [PR #48](https://github.com/bedantsharma/BatchBook/pull/48), working on F.6/F.7 | Was: onboarding any real second paying owner; regulatory exposure (RBI Payment Aggregator rules) |
-| Razorpay won't issue live API keys without an approved business website (Education category), even with KYC activated | 🟡 MITIGATION SUBMITTED — Task F.2b, pilot-institute page live at `https://bedant-classes.batchbook.in`, submitted 2026-07-05, pending Razorpay's review | Live API keys for the pilot institute; the same gate will hit every future owner in Task F.7 |
+| Razorpay won't issue live API keys without an approved business website (Education category), even with KYC activated | 🟢 FIXED for the pilot — Task F.2b, website approved + live keys generated 2026-07-06; Task F.8 scopes the same-gate fix for every future owner (guided self-serve site first, BatchBook wildcard-subdomain generator fallback) | Was: live API keys for the pilot institute; still relevant for every future owner in Task F.7 until F.8 is built |
 | No Razorpay webhook handler — payment status is 100% manual via `PATCH /fee/record/{id}/pay` | 🟢 FIXED — Task F.4, code-complete 2026-07-03, open in [PR #48](https://github.com/bedantsharma/BatchBook/pull/48), not yet smoke-tested                                       | Was: reliable fee status, auto `fee_receipt` WATI send (Task D.2) |
 | No CI/CD pipeline | 🟡 HIGH                                                                                                           | Safe deployments |
 | Owner header stats not wired | 🟡 HIGH                                                                                                           | UX completeness |
@@ -75,7 +75,7 @@ WATI (and any BSP — AiSensy, Interakt, Gupshup) is a paid wrapper (~₹2,600+/
 | **B** | Landing page (real marketing page + WATI website URL) | ✅ DONE — deployed at batchbookui.vercel.app |
 | **C** | Deployment — hosting, domain, SSL, CI/CD | 🟡 PARTIAL — C.1 ✅ C.2 ✅ C.3 ✅ C.4 ✅ · C.5 (smoke test) remaining |
 | **D** | WhatsApp notifications via Meta Cloud API direct (fee reminders, absence alerts) | ✅ DONE — D.0 ✅ D.1 ✅ D.2 ✅ D.3 ✅ · PRs open: BatchBook #33 + batchbookui #26 |
-| **F** | Multi-tenant payments — owner brings their own Razorpay account (BYO keys) + per-tenant webhooks | 🟡 IN PROGRESS — F.1 ✅ F.2 ✅ F.3 ✅ F.3b ✅ F.4 ✅ F.5 ✅ (F.3/F.3b: [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge; F.2/F.4/F.5: [PR #48](https://github.com/bedantsharma/BatchBook/pull/48) + [batchbookui #39](https://github.com/bedantsharma/batchbookui/pull/39), both open) · F.2b 🟡 IN PROGRESS (website-approval blocker for live keys, mitigation submitted to Razorpay 2026-07-05, pending) · F.6–F.7 remaining |
+| **F** | Multi-tenant payments — owner brings their own Razorpay account (BYO keys) + per-tenant webhooks | 🟡 IN PROGRESS — F.1 ✅ F.2 ✅ F.2b ✅ F.3 ✅ F.3b ✅ F.4 ✅ F.5 ✅ (F.3/F.3b: [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) pending merge; F.2/F.4/F.5: [PR #48](https://github.com/bedantsharma/BatchBook/pull/48) + [batchbookui #39](https://github.com/bedantsharma/batchbookui/pull/39), both open) · F.2b resolved 2026-07-06 (pilot website approved, live keys generated) · F.6–F.8 remaining (F.8 scoped 2026-07-06: guided self-serve website onboarding + wildcard-subdomain generator fallback for future owners) |
 | **E** | Polish — multi-child, streak, receipts, E2E CI | ⬜ NOT-STARTED |
 | **S** | Pre-scaling hardening — local JWT verify, connection pooling, prod DB config, Render redundancy | 🟡 PARTIAL — S.1 ✅ S.3 ✅ S.5 ✅ · S.2 pool config ✅ Supavisor switch future · S.4 docs ✅ 2nd instance future |
 
@@ -99,7 +99,7 @@ agents can write any actions required by the owner here
 |--------|---------|
 | Merge [PR #46](https://github.com/bedantsharma/BatchBook/pull/46) and set `FRONTEND_BASE_URL` / `ADMIN_BACKFILL_SECRET` / `ENABLE_SCHEDULER` in Render's env vars | Institute-scoped payment links, success callback, and the backfill job going live (Tasks F.3–F.3b) |
 | Review/merge [PR #48](https://github.com/bedantsharma/BatchBook/pull/48) + [batchbookui #39](https://github.com/bedantsharma/batchbookui/pull/39) (F.2/F.4/F.5), then manually smoke-test key-rotation detection with a real Razorpay test-mode key before building subscription billing (F.6) and the e2e test (F.7) | Safe onboarding of any real second paying owner |
-| Report back Razorpay's decision on `https://bedant-classes.batchbook.in`'s website approval (submitted 2026-07-05) | Task F.2b — live API key generation for the pilot institute, and whether the same approach is needed for every future owner (Task F.7) |
+| Decide who writes/tests the Tier 1 self-serve website guide (Task F.8) — Google Sites vs. Carrd walkthrough, and confirm whether Razorpay accepts a subdomain (`xyz.wixsite.com`) or requires an apex custom domain, once a real owner goes through it | Task F.8 — website onboarding for every future owner |
 
 ---
 
