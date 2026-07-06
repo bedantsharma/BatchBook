@@ -152,7 +152,7 @@ Open questions from the decision doc are now resolved:
 
 ---
 
-### Task F.8 — Website onboarding for every future owner: guided self-serve first, BatchBook-generated fallback second
+### Task F.8 — Website onboarding for every future owner: guided self-serve first, BatchBook-generated fallback second ✅ Tier 2 engineering DONE (pending manual DNS/Vercel wiring + Tier 1 guide)
 
 **Why:** F.2b confirmed Razorpay requires an approved, Education-category business website before it issues live API keys — this hits every future owner in Task F.7's real-onboarding step, not just the pilot. Two things decided this task's shape (research done 2026-07-06, see chat log):
 
@@ -167,15 +167,17 @@ Open questions from the decision doc are now resolved:
 
 **Checklist:**
 
-- [ ] Alembic migration: add `slug` (unique, nullable), `address`, `phone_public`, `email_public`, `description`, `course_fee_display`, and `color_scheme` (string, validated against a fixed list of ~10 presets) to `Institute`
-- [ ] `GET /public/institute/{slug}` — unauthenticated, returns the above display fields for institutes with a slug set, `404` otherwise
-- [ ] `POST /admin/institute/{institute_id}/generate-site` — admin-only (`X-Admin-Secret`, same env var as the F.3b backfill endpoint), accepts slug + all display fields, writes them to the `Institute` row; auto-assigns `color_scheme` if not given (deterministic pick, e.g. hash of slug mod 10)
+- [x] Alembic migration: add `slug` (unique, nullable), `address`, `phone_public`, `email_public`, `description`, `course_fee_display`, and `color_scheme` (string, validated against a fixed list of ~10 presets) to `Institute`
+- [x] `GET /public/institute/{slug}` — unauthenticated, returns the above display fields for institutes with a slug set, `404` otherwise
+- [x] `POST /admin/institute/{institute_id}/generate-site` — admin-only (`X-Admin-Secret`, same env var as the F.3b backfill endpoint), accepts slug + all display fields, writes them to the `Institute` row; auto-assigns `color_scheme` if not given (deterministic pick, e.g. hash of slug mod 10)
 - [ ] Wildcard DNS: `*.batchbook.in` CNAME in Namecheap → Vercel; wildcard domain added to the site-generator's Vercel project
-- [ ] The generator itself: a single small server-rendered app/function (not the existing `batchbookui` SPA — that rewrites every path to `/index.html` and would serve an empty shell to Razorpay's crawler, the same reason F.2b's pilot page was built standalone). Reads the `Host` header, extracts the slug, calls `GET /public/institute/{slug}`, and returns real templated HTML with that institute's data plus the matching color-scheme CSS variables. One deployment serves every institute — no per-institute hosting.
-- [ ] `app.py` CORS: switch from the static `allow_origins` list to `allow_origin_regex` matching `https://.*\.batchbook\.in`, since every generated site is an unpredictable subdomain
+- [x] The generator itself: a single small server-rendered app/function (not the existing `batchbookui` SPA — that rewrites every path to `/index.html` and would serve an empty shell to Razorpay's crawler, the same reason F.2b's pilot page was built standalone). Reads the `Host` header, extracts the slug, calls `GET /public/institute/{slug}`, and returns real templated HTML with that institute's data plus the matching color-scheme CSS variables. One deployment serves every institute — no per-institute hosting.
+- [ ] `app.py` CORS: switch from the static `allow_origins` list to `allow_origin_regex` matching `https://.*\.batchbook\.in`, since every generated site is an unpredictable subdomain — **deliberately skipped in this plan**, not an oversight: see the design spec's CORS decision (out of scope for Task F.8's engineering tasks; revisit once a generated site actually needs to call back into the API cross-origin)
 - [ ] Write the Tier 1 self-serve guide: Google Sites/Carrd setup steps, the exact Razorpay-required sections, and how to generate live API keys once approved
 - [ ] Leave the existing pilot page at `bedant-classes.batchbook.in` as-is (already works, no urgency to migrate it onto the shared generator)
 
-**Verified by:** _(pending — scoped 2026-07-06, not yet built)_
+The site-generator app (Tier 2 engineering piece above) lives in a brand-new standalone sibling repo at `/Users/bedantsharma/PycharmProjects/batchbook-site-generator` — not yet pushed to GitHub; pushing it, plus the wildcard DNS/Vercel wiring above, remain manual steps for the account owner (see that repo's own README).
+
+**Verified by:** _(code-complete for the engineering pieces — migration, `GET /public/institute/{slug}`, `POST /admin/institute/{institute_id}/generate-site`, and the standalone site-generator app — covered by automated tests added alongside Tasks 1–7; pending the manual wildcard DNS/Vercel wiring and the Tier 1 self-serve guide before this task can be closed out)
 
 ---
