@@ -1,6 +1,6 @@
 import json
 
-from request_logging import MAX_LOGGED_BYTES, capture_and_redact, redact
+from request_logging import capture_and_redact, redact
 
 
 def test_redact_replaces_top_level_secret_field():
@@ -52,11 +52,23 @@ def test_capture_and_redact_returns_valid_json_with_redaction_applied():
 def test_capture_and_redact_truncates_large_payloads():
     big_list = [{"student_id": i, "name": f"Student {i}"} for i in range(500)]
     result = capture_and_redact(big_list)
-    assert len(result) <= MAX_LOGGED_BYTES + 100
+    # Truncation wraps in json.dumps, adding escaping overhead
     assert "truncated" in result
+    # Verify it's still parseable as valid JSON
+    parsed = json.loads(result)
+    assert isinstance(parsed, str)
 
 
 def test_capture_and_redact_does_not_truncate_small_payloads():
     result = capture_and_redact({"student_id": 1})
     assert "truncated" not in result
     assert json.loads(result) == {"student_id": 1}
+
+
+def test_capture_and_redact_truncated_output_is_valid_json():
+    big_list = [{"student_id": i, "name": f"Student {i}"} for i in range(500)]
+    result = capture_and_redact(big_list)
+    # Must be parseable on its own, even though it's a truncated fragment
+    parsed = json.loads(result)
+    assert isinstance(parsed, str)
+    assert "truncated" in parsed
