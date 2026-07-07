@@ -27,7 +27,14 @@ RAZORPAY_KEY_SECRET=xxxxxxxx
 META_WHATSAPP_TOKEN=xxxxxxxx
 META_WHATSAPP_PHONE_NUMBER_ID=xxxxxxxx
 WABA_ID=xxxxxxxx
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-xxx.grafana.net/otlp
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic%20xxxxxxxx
+OTEL_SERVICE_NAME=batchbook-backend
+ENVIRONMENT=development
 ```
+
+Telemetry is opt-in — the backend only exports traces/metrics if `OTEL_EXPORTER_OTLP_ENDPOINT` is set. See [`telemetry.py`](./telemetry.py).
 
 Create `batchbookui/.env`:
 

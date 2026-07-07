@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **BatchBook** (4441 symbols, 7367 relationships, 90 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **BatchBook** (4630 symbols, 7646 relationships, 91 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -209,6 +209,11 @@ RAZORPAY_ENCRYPTION_KEY=XXXXX
 FRONTEND_BASE_URL=XXXXX
 ENABLE_SCHEDULER=XXXXX
 ADMIN_BACKFILL_SECRET=XXXXX
+OTEL_EXPORTER_OTLP_PROTOCOL=XXXXX
+OTEL_EXPORTER_OTLP_ENDPOINT=XXXXX
+OTEL_EXPORTER_OTLP_HEADERS=XXXXX
+OTEL_SERVICE_NAME=batchbook-backend
+ENVIRONMENT=development
 ```
 
 All config is via `config.py` → `Settings(BaseSettings)`. Add new vars there AND in `.env`.
@@ -351,5 +356,3 @@ Enrollment ──────  FeeRecord (1:many — one per month)
 ClassSession ────  Attendance (1:many — one per enrolled student per session)
 Batch ───────────  TestScore (via Enrollment — Phase 6)
 ```
-
-
