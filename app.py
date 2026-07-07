@@ -1,3 +1,4 @@
+import json
 import time
 from contextlib import asynccontextmanager
 
@@ -8,11 +9,13 @@ from loguru import logger
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.concurrency import iterate_in_threadpool
 from supabase._async.client import create_client
 
 from clients import supabase_client
 from config import get_settings
 from rate_limiter import limiter
+from request_logging import capture_and_redact
 from routes.admin_route import router as admin_router
 from routes.attendance_route import router as attendance_router
 from routes.batch_route import router as batch_router
@@ -27,7 +30,7 @@ from routes.teacher_route import router as teacher_router
 from routes.test_score_route import router as test_score_router
 from routes.webhook_route import router as webhook_router
 from scheduler import shutdown_scheduler, start_scheduler
-from telemetry import setup_telemetry
+from telemetry import OTEL_ENABLED, setup_telemetry
 
 
 @asynccontextmanager
@@ -66,17 +69,51 @@ app.add_middleware(SlowAPIMiddleware)
 async def log_and_handle_exceptions(request: Request, call_next):
     """Log every request with method, path, status, and elapsed time.
 
-    Also catches any unhandled exception that escapes a route handler so the
-    client always receives a well-formed 500 JSON body instead of a raw
-    traceback or an empty response.
+    When OTEL_ENABLED, also captures redacted request/response bodies and
+    query/path params as structured fields. Also catches any unhandled
+    exception that escapes a route handler so the client always receives a
+    well-formed 500 JSON body instead of a raw traceback or an empty response.
     """
     start = time.perf_counter()
+
+    request_body_log = None
+    if OTEL_ENABLED:
+        raw_body = await request.body()
+        if raw_body and "application/json" in request.headers.get("content-type", ""):
+            try:
+                request_body_log = capture_and_redact(json.loads(raw_body))
+            except json.JSONDecodeError:
+                request_body_log = None
+
     try:
         response = await call_next(request)
         elapsed = time.perf_counter() - start
-        logger.info(
-            f"{request.method} {request.url.path} → {response.status_code} ({elapsed:.3f}s)"
-        )
+
+        if OTEL_ENABLED:
+            response_body_log = None
+            if "application/json" in response.headers.get("content-type", ""):
+                chunks = [chunk async for chunk in response.body_iterator]
+                response.body_iterator = iterate_in_threadpool(iter(chunks))
+                raw_response = b"".join(chunks)
+                try:
+                    response_body_log = capture_and_redact(json.loads(raw_response))
+                except json.JSONDecodeError:
+                    response_body_log = None
+
+            logger.bind(
+                method=request.method,
+                path=request.url.path,
+                status_code=response.status_code,
+                duration_ms=round(elapsed * 1000, 2),
+                query_params=capture_and_redact(dict(request.query_params)),
+                path_params=capture_and_redact(dict(request.path_params)),
+                request_body=request_body_log,
+                response_body=response_body_log,
+            ).info("request completed")
+        else:
+            logger.info(
+                f"{request.method} {request.url.path} → {response.status_code} ({elapsed:.3f}s)"
+            )
         return response
     except Exception as exc:
         elapsed = time.perf_counter() - start
