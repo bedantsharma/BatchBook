@@ -1,6 +1,7 @@
 from datetime import date
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.attendance_base import AttendanceSchema, AttendanceStatus
@@ -13,8 +14,20 @@ class AttendanceRepository:
     async def create_session(
         self, db: AsyncSession, session: ClassSessionSchema
     ) -> ClassSessionSchema:
+        """Insert a ClassSession, relying on the DB's uq_class_session_batch_date
+        constraint as the source of truth for duplicate detection — the
+        caller's pre-check (get_session_by_batch_and_date) is only an
+        optimization and is not race-safe on its own (two concurrent/retried
+        requests can both pass it before either commits).
+        """
         db.add(session)
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError as e:
+            await db.rollback()
+            raise ValueError(
+                f"A session for batch {session.batch_id} on {session.date} already exists"
+            ) from e
         await db.refresh(session)
         return session
 

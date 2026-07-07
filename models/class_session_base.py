@@ -1,6 +1,16 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Index, Integer, String, Time
+from sqlalchemy import (
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Time,
+    UniqueConstraint,
+)
 
 from db.base import Base
 
@@ -22,4 +32,7 @@ class ClassSessionSchema(Base):
     topic = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
 
-    __table_args__ = (Index("ix_class_session_batch_id", "batch_id"),)
+    __table_args__ = (
+        Index("ix_class_session_batch_id", "batch_id"),
+        UniqueConstraint("batch_id", "date", name="uq_class_session_batch_date"),
+    )

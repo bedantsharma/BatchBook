@@ -204,6 +204,42 @@ async def test_bulk_mark_none_present(db_session, service):
     assert all(r.status == AttendanceStatus.ABSENT for r in rows)
 
 
+async def test_create_session_raises_on_db_level_race(db_session, service, monkeypatch):
+    """Two concurrent/retried create_session calls for the same batch+date must
+    not both succeed, even if both pass the initial existence check before
+    either commits (the DB unique constraint is the real guard; the upfront
+    SELECT is just an optimization to fail fast with a friendly message)."""
+    batch = _make_batch(db_session)
+    await db_session.flush()
+
+    session_date = date(2026, 5, 11)
+
+    # Simulate the race: make the pre-check always report "no existing session",
+    # as if a second request's check ran before the first request's insert
+    # committed.
+    async def _always_none(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(service.attendance_repo, "get_session_by_batch_and_date", _always_none)
+
+    await service.create_session(
+        db=db_session,
+        batch_id=batch.id,
+        session_date=session_date,
+        start_time=time(16, 0),
+        end_time=time(17, 0),
+    )
+
+    with pytest.raises(ValueError, match="already exists"):
+        await service.create_session(
+            db=db_session,
+            batch_id=batch.id,
+            session_date=session_date,
+            start_time=time(16, 0),
+            end_time=time(17, 0),
+        )
+
+
 async def test_bulk_mark_raises_on_invalid_session(db_session, service):
     """bulk_mark for a non-existent session should raise ValueError."""
     with pytest.raises(ValueError, match="not found"):
