@@ -38,6 +38,7 @@ def capture_and_redact(data) -> str:
     serialized = json.dumps(redacted, default=str)
     if len(serialized) > MAX_LOGGED_BYTES:
         total = len(serialized)
-        truncated_fragment = serialized[:MAX_LOGGED_BYTES] + f"...[truncated, {total} bytes total]"
-        serialized = json.dumps(truncated_fragment)
+        serialized = json.dumps(
+            f"[truncated, {total} bytes total, exceeds {MAX_LOGGED_BYTES} byte cap]"
+        )
     return serialized
