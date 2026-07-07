@@ -142,3 +142,62 @@ async def test_update_only_changes_specified_fields(db_session, repo, owner_repo
 
     assert institute.name == "Original Name"
     assert institute.city == "New City"
+
+
+# --- public site fields ---
+
+async def test_create_institute_allows_public_site_fields_unset(db_session, repo, owner_repo):
+    owner = await _create_owner(db_session, owner_repo)
+    created = await repo.create(db_session, _institute(owner.id, "Plain Institute", "Delhi", "PLAN0001"))
+
+    assert created.slug is None
+    assert created.color_scheme is None
+
+
+async def test_update_sets_public_site_fields(db_session, repo, owner_repo):
+    owner = await _create_owner(db_session, owner_repo)
+    institute = await repo.create(db_session, _institute(owner.id, "Site Institute", "Jaipur", "SITE0001"))
+
+    updated = await repo.update(
+        db_session,
+        institute,
+        {
+            "slug": "site-institute",
+            "address": "123 MG Road, Jaipur",
+            "phone_public": "9999999999",
+            "email_public": "contact@example.com",
+            "description": "Maths and Science tuition for Class 9-12",
+            "course_fee_display": "Rs 3000/month",
+            "color_scheme": "teal",
+        },
+    )
+
+    assert updated.slug == "site-institute"
+    assert updated.color_scheme == "teal"
+    assert updated.course_fee_display == "Rs 3000/month"
+
+
+# --- get_by_slug ---
+
+async def test_get_by_slug_returns_institute(db_session, repo, owner_repo):
+    owner = await _create_owner(db_session, owner_repo)
+    institute = await repo.create(db_session, _institute(owner.id, "Slug Test", "Lucknow", "SLUG0001"))
+    await repo.update(db_session, institute, {"slug": "slug-test"})
+
+    found = await repo.get_by_slug(db_session, "slug-test")
+
+    assert found is not None
+    assert found.id == institute.id
+
+
+async def test_get_by_slug_returns_none_for_unknown_slug(db_session, repo):
+    result = await repo.get_by_slug(db_session, "does-not-exist")
+    assert result is None
+
+
+async def test_get_by_slug_returns_none_when_slug_is_null(db_session, repo, owner_repo):
+    owner = await _create_owner(db_session, owner_repo)
+    await repo.create(db_session, _institute(owner.id, "No Slug", "Kanpur", "NOSL0001"))
+
+    result = await repo.get_by_slug(db_session, "")
+    assert result is None

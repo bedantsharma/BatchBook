@@ -12,6 +12,7 @@ import pytest
 
 from models.institute_base import InstituteSchema, RazorpayStatus
 from services.institute_service import InstituteService
+from services.site_color_presets import COLOR_PRESETS
 
 
 @pytest.fixture
@@ -386,3 +387,199 @@ async def test_test_connection_raises_when_no_credentials_saved(service, mock_db
         with pytest.raises(ValueError, match="No Razorpay credentials saved"):
             await service.test_razorpay_connection(mock_db, owner_id=4
             )
+
+
+# --- get_public_by_slug ---
+
+async def test_get_public_by_slug_returns_institute(service, mock_db):
+    expected = _make_institute()
+    with patch.object(service.institute_repo, "get_by_slug", new=AsyncMock(return_value=expected)):
+        result = await service.get_public_by_slug(mock_db, "test-institute")
+
+    assert result is expected
+
+
+async def test_get_public_by_slug_returns_none_for_unknown_slug(service, mock_db):
+    with patch.object(service.institute_repo, "get_by_slug", new=AsyncMock(return_value=None)):
+        result = await service.get_public_by_slug(mock_db, "nope")
+
+    assert result is None
+
+
+async def test_get_public_by_slug_returns_none_for_empty_slug(service, mock_db):
+    result = await service.get_public_by_slug(mock_db, "")
+    assert result is None
+
+
+# --- generate_site ---
+
+async def test_generate_site_persists_all_fields(service, mock_db):
+    existing = _make_institute(owner_id=4)
+    updated = _make_institute(owner_id=4)
+    updated.slug = "site-gen-test"
+    updated.address = "1 Test Road"
+    updated.color_scheme = "teal"
+    update_mock = AsyncMock(return_value=updated)
+
+    with (
+        patch.object(service.institute_repo, "get_by_id", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "get_by_slug", new=AsyncMock(return_value=None)),
+        patch.object(service.institute_repo, "update", new=update_mock),
+    ):
+        result = await service.generate_site(
+            mock_db,
+            10,
+            slug="site-gen-test",
+            address="1 Test Road",
+            phone_public="9876543210",
+            email_public="hi@example.com",
+            description="Chemistry tuition for Class 11-12",
+            course_fee_display="Rs 3000/month",
+        )
+
+    assert result is updated
+    update_mock.assert_called_once()
+    call_args = update_mock.call_args[0]
+    assert call_args[1] is existing
+    updates = call_args[2]
+    assert updates["slug"] == "site-gen-test"
+    assert updates["address"] == "1 Test Road"
+    assert updates["color_scheme"] in COLOR_PRESETS
+
+
+async def test_generate_site_accepts_explicit_color_scheme(service, mock_db):
+    existing = _make_institute(owner_id=4)
+    update_mock = AsyncMock(return_value=_make_institute(owner_id=4))
+
+    with (
+        patch.object(service.institute_repo, "get_by_id", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "get_by_slug", new=AsyncMock(return_value=None)),
+        patch.object(service.institute_repo, "update", new=update_mock),
+    ):
+        await service.generate_site(
+            mock_db,
+            10,
+            slug="color-test",
+            address="2 Test Road",
+            phone_public="9876543210",
+            email_public="hi@example.com",
+            description="Bio tuition",
+            course_fee_display="Rs 2500/month",
+            color_scheme="maroon",
+        )
+
+    updates = update_mock.call_args[0][2]
+    assert updates["color_scheme"] == "maroon"
+
+
+async def test_generate_site_rejects_invalid_color_scheme(service, mock_db):
+    existing = _make_institute(owner_id=4)
+    update_mock = AsyncMock()
+
+    with (
+        patch.object(service.institute_repo, "get_by_id", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "get_by_slug", new=AsyncMock(return_value=None)),
+        patch.object(service.institute_repo, "update", new=update_mock),
+    ):
+        with pytest.raises(ValueError):
+            await service.generate_site(
+                mock_db,
+                10,
+                slug="bad-color",
+                address="x",
+                phone_public="9876543210",
+                email_public="hi@example.com",
+                description="x",
+                course_fee_display="x",
+                color_scheme="neon-pink",
+            )
+
+    update_mock.assert_not_called()
+
+
+async def test_generate_site_rejects_unknown_institute_id(service, mock_db):
+    with patch.object(service.institute_repo, "get_by_id", new=AsyncMock(return_value=None)):
+        with pytest.raises(ValueError, match="No institute found"):
+            await service.generate_site(
+                mock_db,
+                999999,
+                slug="ghost",
+                address="x",
+                phone_public="9876543210",
+                email_public="hi@example.com",
+                description="x",
+                course_fee_display="x",
+            )
+
+
+async def test_generate_site_rejects_slug_taken_by_different_institute(service, mock_db):
+    existing = _make_institute(owner_id=4)
+    other_institute = _make_institute(owner_id=7)
+    other_institute.id = 99
+    update_mock = AsyncMock()
+
+    with (
+        patch.object(service.institute_repo, "get_by_id", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "get_by_slug", new=AsyncMock(return_value=other_institute)),
+        patch.object(service.institute_repo, "update", new=update_mock),
+    ):
+        with pytest.raises(ValueError, match="already in use"):
+            await service.generate_site(
+                mock_db,
+                10,
+                slug="taken-slug",
+                address="x",
+                phone_public="9876543210",
+                email_public="hi@example.com",
+                description="x",
+                course_fee_display="x",
+            )
+
+    update_mock.assert_not_called()
+
+
+async def test_generate_site_allows_resaving_own_existing_slug(service, mock_db):
+    existing = _make_institute(owner_id=4)
+    existing.slug = "resave-test"
+    update_mock = AsyncMock(return_value=existing)
+
+    with (
+        patch.object(service.institute_repo, "get_by_id", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "get_by_slug", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "update", new=update_mock),
+    ):
+        await service.generate_site(
+            mock_db,
+            10,
+            slug="resave-test",
+            address="new address",
+            phone_public="9876543210",
+            email_public="hi@example.com",
+            description="new",
+            course_fee_display="new",
+        )
+
+    update_mock.assert_called_once()
+
+
+async def test_generate_site_rejects_invalid_slug_format(service, mock_db):
+    existing = _make_institute(owner_id=4)
+    update_mock = AsyncMock()
+
+    with (
+        patch.object(service.institute_repo, "get_by_id", new=AsyncMock(return_value=existing)),
+        patch.object(service.institute_repo, "update", new=update_mock),
+    ):
+        with pytest.raises(ValueError):
+            await service.generate_site(
+                mock_db,
+                10,
+                slug="Not A Valid Slug!",
+                address="x",
+                phone_public="9876543210",
+                email_public="hi@example.com",
+                description="x",
+                course_fee_display="x",
+            )
+
+    update_mock.assert_not_called()

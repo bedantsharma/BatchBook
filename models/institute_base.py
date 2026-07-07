@@ -28,4 +28,11 @@ class InstituteSchema(Base):
         default=RazorpayStatus.NOT_CONNECTED,
         server_default="NOT_CONNECTED",
     )
+    slug = Column(String, nullable=True, unique=True, index=True)
+    address = Column(String, nullable=True)
+    phone_public = Column(String, nullable=True)
+    email_public = Column(String, nullable=True)
+    description = Column(String, nullable=True)
+    course_fee_display = Column(String, nullable=True)
+    color_scheme = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
