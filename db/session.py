@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from config import get_settings
+from telemetry import instrument_engine
 
 # When switching DATABASE_URL to Supabase's Supavisor transaction-mode pooler
 # (port 6543), also add: connect_args={"statement_cache_size": 0}
@@ -24,6 +25,7 @@ engine = create_async_engine(
     get_settings().database_url,
     **_engine_kwargs,
 )
+instrument_engine(engine)
 
 AsyncSessionLocal = async_sessionmaker(
     engine,
