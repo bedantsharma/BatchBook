@@ -27,6 +27,7 @@ from routes.teacher_route import router as teacher_router
 from routes.test_score_route import router as test_score_router
 from routes.webhook_route import router as webhook_router
 from scheduler import shutdown_scheduler, start_scheduler
+from telemetry import setup_telemetry
 
 
 @asynccontextmanager
@@ -53,6 +54,8 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+setup_telemetry(app)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
