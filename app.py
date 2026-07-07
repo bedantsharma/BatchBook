@@ -76,16 +76,16 @@ async def log_and_handle_exceptions(request: Request, call_next):
     """
     start = time.perf_counter()
 
-    request_body_log = None
-    if OTEL_ENABLED:
-        raw_body = await request.body()
-        if raw_body and "application/json" in request.headers.get("content-type", ""):
-            try:
-                request_body_log = capture_and_redact(json.loads(raw_body))
-            except json.JSONDecodeError:
-                request_body_log = None
-
     try:
+        request_body_log = None
+        if OTEL_ENABLED:
+            raw_body = await request.body()
+            if raw_body and "application/json" in request.headers.get("content-type", ""):
+                try:
+                    request_body_log = capture_and_redact(json.loads(raw_body))
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    request_body_log = None
+
         response = await call_next(request)
         elapsed = time.perf_counter() - start
 
@@ -97,7 +97,7 @@ async def log_and_handle_exceptions(request: Request, call_next):
                 raw_response = b"".join(chunks)
                 try:
                     response_body_log = capture_and_redact(json.loads(raw_response))
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, UnicodeDecodeError):
                     response_body_log = None
 
             logger.bind(
