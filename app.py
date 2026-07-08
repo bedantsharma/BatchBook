@@ -15,7 +15,7 @@ from supabase._async.client import create_client
 from clients import supabase_client
 from config import get_settings
 from rate_limiter import limiter
-from request_logging import capture_and_redact
+from request_logging import MAX_LOGGED_BYTES, capture_and_redact
 from routes.admin_route import router as admin_router
 from routes.attendance_route import router as attendance_router
 from routes.batch_route import router as batch_router
@@ -79,12 +79,18 @@ async def log_and_handle_exceptions(request: Request, call_next):
     try:
         request_body_log = None
         if OTEL_ENABLED:
-            raw_body = await request.body()
-            if raw_body and "application/json" in request.headers.get("content-type", ""):
-                try:
-                    request_body_log = capture_and_redact(json.loads(raw_body))
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    request_body_log = None
+            request_content_length = request.headers.get("content-length")
+            if request_content_length and int(request_content_length) > MAX_LOGGED_BYTES:
+                request_body_log = json.dumps(
+                    f"[request body too large to capture: {request_content_length} bytes]"
+                )
+            else:
+                raw_body = await request.body()
+                if raw_body and "application/json" in request.headers.get("content-type", ""):
+                    try:
+                        request_body_log = capture_and_redact(json.loads(raw_body))
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        request_body_log = None
 
         response = await call_next(request)
         elapsed = time.perf_counter() - start
@@ -92,13 +98,19 @@ async def log_and_handle_exceptions(request: Request, call_next):
         if OTEL_ENABLED:
             response_body_log = None
             if "application/json" in response.headers.get("content-type", ""):
-                chunks = [chunk async for chunk in response.body_iterator]
-                response.body_iterator = iterate_in_threadpool(iter(chunks))
-                raw_response = b"".join(chunks)
-                try:
-                    response_body_log = capture_and_redact(json.loads(raw_response))
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    response_body_log = None
+                response_content_length = response.headers.get("content-length")
+                if response_content_length and int(response_content_length) > MAX_LOGGED_BYTES:
+                    response_body_log = json.dumps(
+                        f"[response body too large to capture: {response_content_length} bytes]"
+                    )
+                else:
+                    chunks = [chunk async for chunk in response.body_iterator]
+                    response.body_iterator = iterate_in_threadpool(iter(chunks))
+                    raw_response = b"".join(chunks)
+                    try:
+                        response_body_log = capture_and_redact(json.loads(raw_response))
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        response_body_log = None
 
             logger.bind(
                 method=request.method,
@@ -117,10 +129,22 @@ async def log_and_handle_exceptions(request: Request, call_next):
         return response
     except Exception as exc:
         elapsed = time.perf_counter() - start
-        logger.error(
-            f"Unhandled exception on {request.method} {request.url.path}: {exc!r}"
-        )
-        logger.info(f"{request.method} {request.url.path} → 500 ({elapsed:.3f}s)")
+        if OTEL_ENABLED:
+            logger.bind(
+                method=request.method,
+                path=request.url.path,
+                status_code=500,
+                duration_ms=round(elapsed * 1000, 2),
+                query_params=capture_and_redact(dict(request.query_params)),
+                path_params=capture_and_redact(dict(request.path_params)),
+                request_body=request_body_log,
+                exception=repr(exc),
+            ).error("request failed")
+        else:
+            logger.error(
+                f"Unhandled exception on {request.method} {request.url.path}: {exc!r}"
+            )
+            logger.info(f"{request.method} {request.url.path} → 500 ({elapsed:.3f}s)")
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 

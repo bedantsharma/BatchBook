@@ -17,6 +17,16 @@ import app as app_module
 from app import app
 
 
+class _LogCapture:
+    """Collects loguru records emitted while this sink is attached."""
+
+    def __init__(self):
+        self.records = []
+
+    def __call__(self, message):
+        self.records.append(message.record)
+
+
 @pytest.fixture
 def echo_route():
     """Register a temporary POST /echo-body route accepting any body."""
@@ -65,3 +75,59 @@ async def test_middleware_survives_non_utf8_body_when_otel_enabled(
     # the broad `except Exception` and turned into a fabricated 500 (response
     # side). Either way the request must complete with a real HTTP response.
     assert response.status_code in (200, 401, 404, 422, 500)
+
+
+async def test_middleware_redacts_sensitive_fields_in_bound_log_record(
+    client, monkeypatch
+):
+    """A real JSON request body flows through the actual middleware +
+    logger.bind path (not the isolated request_logging.py unit tests) and
+    comes out redacted."""
+    from loguru import logger
+
+    monkeypatch.setattr(app_module, "OTEL_ENABLED", True)
+
+    capture = _LogCapture()
+    sink_id = logger.add(capture, level="INFO")
+    try:
+        response = await client.post(
+            "/owner/generate_otp",
+            json={
+                "razorpay_key_id": "rzp_test_abc",
+                "razorpay_key_secret": "super_secret_marker_value",
+            },
+        )
+        # The middleware captures the body before routing/validation runs,
+        # so the eventual status code doesn't matter for this assertion.
+        assert response.status_code in (200, 401, 404, 422, 429, 500)
+    finally:
+        logger.remove(sink_id)
+
+    completed_records = [
+        r for r in capture.records if r["message"] == "request completed"
+    ]
+    assert completed_records, "expected a 'request completed' log record"
+
+    request_body = completed_records[-1]["extra"]["request_body"]
+    assert "[REDACTED]" in request_body
+    assert "super_secret_marker_value" not in request_body
+
+
+async def test_middleware_response_body_survives_drain_and_reconstruct(
+    client, monkeypatch
+):
+    """Proves the client still receives the correct, unmangled response body
+    after the middleware drains response.body_iterator and reconstructs it
+    via iterate_in_threadpool."""
+    monkeypatch.setattr(app_module, "OTEL_ENABLED", False)
+    baseline = await client.get("/public/institute/does-not-exist")
+    assert baseline.status_code == 404
+    assert baseline.json() == {"detail": "No public site configured for this slug"}
+
+    monkeypatch.setattr(app_module, "OTEL_ENABLED", True)
+    response = await client.get("/public/institute/does-not-exist")
+
+    assert response.status_code == baseline.status_code == 404
+    assert response.json() == baseline.json() == {
+        "detail": "No public site configured for this slug"
+    }
