@@ -22,3 +22,6 @@ test-results/
 playwright-report/
 .playwright-mcp/
 BATCHBOOK_ROADMAP.md
+
+# Git worktrees (superpowers:using-git-worktrees)
+.worktrees/
