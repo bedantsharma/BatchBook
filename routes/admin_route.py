@@ -10,6 +10,8 @@ from db.session import get_db
 from routes.requests.backfill_payment_links_request import BackfillPaymentLinksRequest
 from routes.requests.generate_site_request import GenerateSiteRequest
 from routes.responses.backfill_payment_links_response import BackfillPaymentLinksResponse
+from routes.responses.seed_demo_accounts_response import SeedDemoAccountsResponse
+from services.demo_seed_service import DemoSeedService, get_demo_seed_service
 from services.fee_service import FeeService, get_fee_service
 from services.institute_service import InstituteService, get_institute_service
 
@@ -17,6 +19,7 @@ router = APIRouter(prefix="/admin")
 
 FeeServiceDep = Annotated[FeeService, Depends(get_fee_service)]
 InstituteServiceDep = Annotated[InstituteService, Depends(get_institute_service)]
+DemoSeedServiceDep = Annotated[DemoSeedService, Depends(get_demo_seed_service)]
 
 
 async def _verify_admin_secret(x_admin_secret: Annotated[str | None, Header()] = None) -> None:
@@ -87,3 +90,33 @@ async def generate_site(
         status_code = 404 if message.startswith("No institute found") else 400
         raise HTTPException(status_code=status_code, detail=message) from e
     return {"public_url": f"https://{institute.slug}.batchbook.in"}
+
+
+@router.post(
+    "/seed-demo-accounts",
+    summary="Seed the Play Store reviewer test accounts (owner 9999999999 + student 9999999998)",
+    response_model=SeedDemoAccountsResponse,
+    dependencies=[Depends(_verify_admin_secret)],
+)
+async def seed_demo_accounts(
+    demo_seed_service: DemoSeedServiceDep,
+    db: AsyncSession = Depends(get_db),
+):
+    """Idempotent — safe to re-run any time Test-OTP-backed reviewer data drifts.
+
+    Creates/links Owner (9999999999) -> Institute -> 2 Batches, and Parent+Student
+    (9999999998) -> 2 Enrollments -> ClassSessions/Attendance/FeeRecords, using the
+    same production service methods real signups go through."""
+    try:
+        result = await demo_seed_service.seed(db)
+    except Exception as e:
+        logger.error(e)
+        raise HTTPException(status_code=500, detail="Demo seed failed — check logs")
+    return SeedDemoAccountsResponse(
+        owner_created=result.owner_created,
+        institute_created=result.institute_created,
+        batches_created=result.batches_created,
+        student_created=result.student_created,
+        sessions_created=result.sessions_created,
+        fee_records_created=result.fee_records_created,
+    )
