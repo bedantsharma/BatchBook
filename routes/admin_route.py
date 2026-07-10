@@ -106,12 +106,15 @@ async def seed_demo_accounts(
 
     Creates/links Owner (9999999999) -> Institute -> 2 Batches, and Parent+Student
     (9999999998) -> 2 Enrollments -> ClassSessions/Attendance/FeeRecords, using the
-    same production service methods real signups go through."""
+    same production service methods real signups go through.
+
+    Note: session/fee dates are computed relative to today, so re-running on a
+    later calendar day may add new non-duplicate rows instead of all-zero counters."""
     try:
         result = await demo_seed_service.seed(db)
     except Exception as e:
-        logger.error(e)
-        raise HTTPException(status_code=500, detail="Demo seed failed — check logs")
+        logger.exception("Demo seed failed")
+        raise HTTPException(status_code=500, detail="Demo seed failed — check logs") from e
     return SeedDemoAccountsResponse(
         owner_created=result.owner_created,
         institute_created=result.institute_created,
