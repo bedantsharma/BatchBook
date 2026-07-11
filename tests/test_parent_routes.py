@@ -82,8 +82,9 @@ async def test_generate_otp_rejects_invalid_phone(client):
 
 # --- POST /parent/verify_otp ---
 
-async def test_verify_otp_returns_token_and_children_on_success(client):
+async def test_verify_otp_returns_token_parent_name_and_children_on_success(client):
     user_id = uuid4()
+    child = _make_student_schema()
     mock_service = MagicMock(spec=ParentService)
     mock_service.verify_otp = AsyncMock(
         return_value=(
@@ -91,7 +92,8 @@ async def test_verify_otp_returns_token_and_children_on_success(client):
             "refresh_tok_1234567890",
             "authenticated",
             user_id,
-            [_make_student_schema()],
+            "Test Parent",
+            [child],
         )
     )
 
@@ -106,12 +108,10 @@ async def test_verify_otp_returns_token_and_children_on_success(client):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["auth_token"] == "access_tok_1234567890"
-    assert body["refresh_token"] == "refresh_tok_1234567890"
-    assert body["aud"] == "authenticated"
-    assert body["user_id"] == str(user_id)
+    assert body["parent_name"] == "Test Parent"
     assert len(body["children"]) == 1
     assert body["children"][0]["name"] == "Test Child"
+    assert body["children"][0]["email"] == "child@test.com"
 
 
 async def test_verify_otp_returns_401_on_value_error(client):
@@ -214,3 +214,128 @@ async def test_refresh_token_returns_401_on_failure(client, override_supabase):
     response = await client.post("/parent/refresh", json={"refresh_token": "bad_tok_1234567890"})
 
     assert response.status_code == 401
+
+
+# --- PATCH /parent/update ---
+
+async def test_update_parent_returns_updated_profile(client):
+    user_id = uuid4()
+    updated_parent = _make_parent_schema(user_id=user_id)
+    updated_parent.name = "New Name"
+
+    mock_service = MagicMock(spec=ParentService)
+    mock_service.get_current_user_id = AsyncMock(return_value=user_id)
+    mock_service.update_parent = AsyncMock(return_value=updated_parent)
+    mock_service.get_children = AsyncMock(return_value=[])
+
+    from app import app
+    app.dependency_overrides[get_parent_service] = lambda: mock_service
+
+    response = await client.patch(
+        "/parent/update",
+        json={"name": "New Name"},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "New Name"
+    call_kwargs = mock_service.update_parent.call_args.kwargs
+    assert call_kwargs["user_id"] == user_id
+    assert call_kwargs["updates"] == {"name": "New Name"}
+
+
+async def test_update_parent_returns_404_when_not_found(client):
+    user_id = uuid4()
+    mock_service = MagicMock(spec=ParentService)
+    mock_service.get_current_user_id = AsyncMock(return_value=user_id)
+    mock_service.update_parent = AsyncMock(return_value=None)
+
+    from app import app
+    app.dependency_overrides[get_parent_service] = lambda: mock_service
+
+    response = await client.patch(
+        "/parent/update",
+        json={"name": "New Name"},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 404
+
+
+async def test_update_parent_returns_401_without_auth(client):
+    mock_service = MagicMock(spec=ParentService)
+    mock_service.get_current_user_id = AsyncMock(side_effect=Exception("bad token"))
+
+    from app import app
+    app.dependency_overrides[get_parent_service] = lambda: mock_service
+
+    response = await client.patch(
+        "/parent/update",
+        json={"name": "New Name"},
+        headers={"Authorization": "Bearer badtoken"},
+    )
+
+    assert response.status_code == 401
+
+
+# --- PATCH /parent/children/{student_id} ---
+
+async def test_update_child_returns_updated_student(client):
+    user_id = uuid4()
+    updated_child = _make_student_schema()
+    updated_child.email = "new@test.com"
+
+    mock_service = MagicMock(spec=ParentService)
+    mock_service.get_current_user_id = AsyncMock(return_value=user_id)
+    mock_service.update_child = AsyncMock(return_value=updated_child)
+
+    from app import app
+    app.dependency_overrides[get_parent_service] = lambda: mock_service
+
+    response = await client.patch(
+        "/parent/children/10",
+        json={"email": "new@test.com"},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["email"] == "new@test.com"
+
+
+async def test_update_child_returns_403_when_not_owned(client):
+    user_id = uuid4()
+    mock_service = MagicMock(spec=ParentService)
+    mock_service.get_current_user_id = AsyncMock(return_value=user_id)
+    mock_service.update_child = AsyncMock(
+        side_effect=PermissionError("This child does not belong to the authenticated parent")
+    )
+
+    from app import app
+    app.dependency_overrides[get_parent_service] = lambda: mock_service
+
+    response = await client.patch(
+        "/parent/children/999",
+        json={"email": "new@test.com"},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 403
+
+
+async def test_update_child_returns_404_when_not_found(client):
+    user_id = uuid4()
+    mock_service = MagicMock(spec=ParentService)
+    mock_service.get_current_user_id = AsyncMock(return_value=user_id)
+    mock_service.update_child = AsyncMock(return_value=None)
+
+    from app import app
+    app.dependency_overrides[get_parent_service] = lambda: mock_service
+
+    response = await client.patch(
+        "/parent/children/404",
+        json={"email": "new@test.com"},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 404

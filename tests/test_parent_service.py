@@ -85,7 +85,7 @@ async def test_get_or_create_creates_new_parent_when_not_found(service):
 
 # --- verify_otp ---
 
-async def test_verify_otp_returns_token_and_children_on_success(service):
+async def test_verify_otp_returns_token_parent_name_and_children_on_success(service):
     user_id = uuid4()
     mock_user = MagicMock()
     mock_user.id = str(user_id)
@@ -103,7 +103,9 @@ async def test_verify_otp_returns_token_and_children_on_success(service):
     mock_supabase.auth.verify_otp = AsyncMock(return_value=mock_data)
 
     parent = _make_parent_schema(user_id=user_id)
+    parent.name = "Test Parent"
     child = _make_student_schema(parent_id=parent.id)
+    child.email = "child@test.com"
 
     service.parent_repo = MagicMock()
     service.parent_repo.get_by_user_id = AsyncMock(return_value=None)
@@ -111,7 +113,14 @@ async def test_verify_otp_returns_token_and_children_on_success(service):
     service.parent_repo.create_parent = AsyncMock(return_value=parent)
     service.parent_repo.get_students_by_parent_id = AsyncMock(return_value=[child])
 
-    access_token, refresh_token, aud, returned_user_id, children = await service.verify_otp(
+    (
+        access_token,
+        refresh_token,
+        aud,
+        returned_user_id,
+        parent_name,
+        children,
+    ) = await service.verify_otp(
         supabase=mock_supabase,
         db=MagicMock(),
         phone="9876543210",
@@ -123,7 +132,9 @@ async def test_verify_otp_returns_token_and_children_on_success(service):
     assert refresh_token == "refresh_tok_1234567890"
     assert aud == "authenticated"
     assert returned_user_id == user_id
+    assert parent_name == "Test Parent"
     assert len(children) == 1
+    assert children[0].email == "child@test.com"
 
 
 async def test_verify_otp_raises_value_error_when_no_user(service):
@@ -263,3 +274,67 @@ async def test_backfills_name_on_existing_verified_parent(db_session: AsyncSessi
         db_session, uid, "9111111111", name="Filled"
     )
     assert parent.name == "Filled"
+
+
+# --- update_child ---
+
+async def test_update_child_applies_changes_when_owned(service):
+    user_id = uuid4()
+    parent = _make_parent_schema(user_id=user_id)
+    student = _make_student_schema(parent_id=parent.id)
+    updated_student = _make_student_schema(parent_id=parent.id)
+    updated_student.email = "new@test.com"
+
+    service.parent_repo = MagicMock()
+    service.parent_repo.get_by_user_id = AsyncMock(return_value=parent)
+    service.student_repo = MagicMock()
+    service.student_repo.get_by_id = AsyncMock(return_value=student)
+    service.student_repo.update_student = AsyncMock(return_value=updated_student)
+
+    result = await service.update_child(
+        db=MagicMock(), user_id=user_id, student_id=student.id, updates={"email": "new@test.com"}
+    )
+    assert result.email == "new@test.com"
+
+
+async def test_update_child_raises_permission_error_when_not_owned(service):
+    user_id = uuid4()
+    parent = _make_parent_schema(user_id=user_id)
+    other_parents_student = _make_student_schema(parent_id=999)
+
+    service.parent_repo = MagicMock()
+    service.parent_repo.get_by_user_id = AsyncMock(return_value=parent)
+    service.student_repo = MagicMock()
+    service.student_repo.get_by_id = AsyncMock(return_value=other_parents_student)
+
+    with pytest.raises(PermissionError):
+        await service.update_child(
+            db=MagicMock(), user_id=user_id, student_id=999, updates={"email": "x@test.com"}
+        )
+
+
+async def test_update_child_returns_none_when_student_not_found(service):
+    user_id = uuid4()
+    parent = _make_parent_schema(user_id=user_id)
+
+    service.parent_repo = MagicMock()
+    service.parent_repo.get_by_user_id = AsyncMock(return_value=parent)
+    service.student_repo = MagicMock()
+    service.student_repo.get_by_id = AsyncMock(return_value=None)
+
+    result = await service.update_child(
+        db=MagicMock(), user_id=user_id, student_id=404, updates={"email": "x@test.com"}
+    )
+    assert result is None
+
+
+async def test_update_child_returns_none_when_parent_not_found(service):
+    service.parent_repo = MagicMock()
+    service.parent_repo.get_by_user_id = AsyncMock(return_value=None)
+    service.student_repo = MagicMock()
+
+    result = await service.update_child(
+        db=MagicMock(), user_id=uuid4(), student_id=1, updates={"email": "x@test.com"}
+    )
+    assert result is None
+    service.student_repo.get_by_id.assert_not_called()
