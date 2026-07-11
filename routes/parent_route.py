@@ -14,6 +14,7 @@ from routes.requests.join_institute_request import JoinInstituteRequest
 from routes.requests.otp_generate_request import OtpGenerateRequest
 from routes.requests.parent_verify_otp_request import ParentVerifyOtpRequest
 from routes.requests.refresh_token_request import RefreshTokenRequest
+from routes.requests.update_child_request import UpdateChildRequest
 from routes.requests.update_parent_request import UpdateParentRequest
 from routes.responses.institute_search_response import InstituteSearchResponse
 from routes.responses.parent_profile_response import ParentProfileResponse, StudentSummary
@@ -170,6 +171,36 @@ async def update_parent(
         phone_number=updated.phone_number,
         created_at=updated.created_at,
         children=children_summary,
+    )
+
+
+@router.patch(
+    "/children/{student_id}",
+    summary="Update a linked child's name/email",
+    response_model=StudentSummary,
+)
+async def update_child(
+    student_id: int,
+    update_request: UpdateChildRequest,
+    parent_service: ParentServiceDep,
+    db: AsyncSession = Depends(get_db),
+    user_id: UUID = Depends(_get_current_user_id),
+):
+    updates = update_request.model_dump(exclude_none=True)
+    try:
+        updated = await parent_service.update_child(
+            db=db, user_id=user_id, student_id=student_id, updates=updates
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Child record not found")
+    return StudentSummary(
+        id=updated.id,
+        name=updated.name,
+        email=updated.email,
+        fees_status=updated.fees_status.value,
+        institute_id=updated.institute_id,
     )
 
 

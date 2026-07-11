@@ -6,12 +6,14 @@ from supabase import AsyncClient
 from models.parent_base import ParentSchema
 from models.student_base import StudentSchema
 from repositories.parent_repository import ParentRepository
+from repositories.student_repository import StudentRepository
 from services.auth_service import get_current_user_id
 
 
 class ParentService:
     def __init__(self):
         self.parent_repo = ParentRepository()
+        self.student_repo = StudentRepository()
 
     async def get_or_create_after_otp(
         self,
@@ -93,6 +95,19 @@ class ParentService:
         if not parent:
             return None
         return await self.parent_repo.update_parent(db, parent, updates)
+
+    async def update_child(
+        self, db: AsyncSession, user_id: UUID, student_id: int, updates: dict
+    ) -> StudentSchema | None:
+        parent = await self.parent_repo.get_by_user_id(db, user_id)
+        if not parent:
+            return None
+        student = await self.student_repo.get_by_id(db, student_id)
+        if not student:
+            return None
+        if student.parent_id != parent.id:
+            raise PermissionError("This child does not belong to the authenticated parent")
+        return await self.student_repo.update_student(db, student, updates)
 
 
 def get_parent_service() -> ParentService:

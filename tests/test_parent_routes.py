@@ -277,3 +277,65 @@ async def test_update_parent_returns_401_without_auth(client):
     )
 
     assert response.status_code == 401
+
+
+# --- PATCH /parent/children/{student_id} ---
+
+async def test_update_child_returns_updated_student(client):
+    user_id = uuid4()
+    updated_child = _make_student_schema()
+    updated_child.email = "new@test.com"
+
+    mock_service = MagicMock(spec=ParentService)
+    mock_service.get_current_user_id = AsyncMock(return_value=user_id)
+    mock_service.update_child = AsyncMock(return_value=updated_child)
+
+    from app import app
+    app.dependency_overrides[get_parent_service] = lambda: mock_service
+
+    response = await client.patch(
+        "/parent/children/10",
+        json={"email": "new@test.com"},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["email"] == "new@test.com"
+
+
+async def test_update_child_returns_403_when_not_owned(client):
+    user_id = uuid4()
+    mock_service = MagicMock(spec=ParentService)
+    mock_service.get_current_user_id = AsyncMock(return_value=user_id)
+    mock_service.update_child = AsyncMock(
+        side_effect=PermissionError("This child does not belong to the authenticated parent")
+    )
+
+    from app import app
+    app.dependency_overrides[get_parent_service] = lambda: mock_service
+
+    response = await client.patch(
+        "/parent/children/999",
+        json={"email": "new@test.com"},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 403
+
+
+async def test_update_child_returns_404_when_not_found(client):
+    user_id = uuid4()
+    mock_service = MagicMock(spec=ParentService)
+    mock_service.get_current_user_id = AsyncMock(return_value=user_id)
+    mock_service.update_child = AsyncMock(return_value=None)
+
+    from app import app
+    app.dependency_overrides[get_parent_service] = lambda: mock_service
+
+    response = await client.patch(
+        "/parent/children/404",
+        json={"email": "new@test.com"},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 404
