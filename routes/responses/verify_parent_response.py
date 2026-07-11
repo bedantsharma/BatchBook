@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 class StudentSummaryInToken(BaseModel):
     id: int
     name: str | None
+    email: str | None
     fees_status: str
 
     model_config = {"from_attributes": True}
@@ -14,4 +15,5 @@ class VerifyParentResponse(BaseModel):
     refresh_token: str = Field(min_length=10)
     aud: str = Field(...)
     user_id: str = Field(...)
+    parent_name: str | None = None
     children: list[StudentSummaryInToken] = []

@@ -68,7 +68,14 @@ async def verify_otp(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        access_token, refresh_token, aud, user_id, children = await parent_service.verify_otp(
+        (
+            access_token,
+            refresh_token,
+            aud,
+            user_id,
+            parent_name,
+            children,
+        ) = await parent_service.verify_otp(
             supabase=supabase,
             db=db,
             phone=verify_request.phone,
@@ -84,7 +91,7 @@ async def verify_otp(
             detail="OTP verification failed due to a server error — check backend logs.",
         )
     children_summary = [
-        StudentSummaryInToken(id=c.id, name=c.name, fees_status=c.fees_status.value)
+        StudentSummaryInToken(id=c.id, name=c.name, email=c.email, fees_status=c.fees_status.value)
         for c in children
     ]
     return VerifyParentResponse(
@@ -92,6 +99,7 @@ async def verify_otp(
         refresh_token=refresh_token,
         aud=aud,
         user_id=str(user_id),
+        parent_name=parent_name,
         children=children_summary,
     )
 

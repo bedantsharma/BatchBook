@@ -82,8 +82,9 @@ async def test_generate_otp_rejects_invalid_phone(client):
 
 # --- POST /parent/verify_otp ---
 
-async def test_verify_otp_returns_token_and_children_on_success(client):
+async def test_verify_otp_returns_token_parent_name_and_children_on_success(client):
     user_id = uuid4()
+    child = _make_student_schema()
     mock_service = MagicMock(spec=ParentService)
     mock_service.verify_otp = AsyncMock(
         return_value=(
@@ -91,7 +92,8 @@ async def test_verify_otp_returns_token_and_children_on_success(client):
             "refresh_tok_1234567890",
             "authenticated",
             user_id,
-            [_make_student_schema()],
+            "Test Parent",
+            [child],
         )
     )
 
@@ -106,12 +108,10 @@ async def test_verify_otp_returns_token_and_children_on_success(client):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["auth_token"] == "access_tok_1234567890"
-    assert body["refresh_token"] == "refresh_tok_1234567890"
-    assert body["aud"] == "authenticated"
-    assert body["user_id"] == str(user_id)
+    assert body["parent_name"] == "Test Parent"
     assert len(body["children"]) == 1
     assert body["children"][0]["name"] == "Test Child"
+    assert body["children"][0]["email"] == "child@test.com"
 
 
 async def test_verify_otp_returns_401_on_value_error(client):

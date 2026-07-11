@@ -46,8 +46,8 @@ class ParentService:
         phone: str,
         token: str,
         name: str | None,
-    ) -> tuple[str, str, str, UUID, list[StudentSchema]]:
-        """Verify OTP, upsert parent, return (access_token, refresh_token, aud, user_id, children)."""
+    ) -> tuple[str, str, str, UUID, str | None, list[StudentSchema]]:
+        """Verify OTP, upsert parent, return (access_token, refresh_token, aud, user_id, parent_name, children)."""
         try:
             data = await supabase.auth.verify_otp({
                 "phone": f"+91{phone}",
@@ -66,6 +66,7 @@ class ParentService:
             data.session.refresh_token,
             data.user.aud,
             user_id,
+            parent.name,
             children,
         )
 

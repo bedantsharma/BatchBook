@@ -85,7 +85,7 @@ async def test_get_or_create_creates_new_parent_when_not_found(service):
 
 # --- verify_otp ---
 
-async def test_verify_otp_returns_token_and_children_on_success(service):
+async def test_verify_otp_returns_token_parent_name_and_children_on_success(service):
     user_id = uuid4()
     mock_user = MagicMock()
     mock_user.id = str(user_id)
@@ -103,7 +103,9 @@ async def test_verify_otp_returns_token_and_children_on_success(service):
     mock_supabase.auth.verify_otp = AsyncMock(return_value=mock_data)
 
     parent = _make_parent_schema(user_id=user_id)
+    parent.name = "Test Parent"
     child = _make_student_schema(parent_id=parent.id)
+    child.email = "child@test.com"
 
     service.parent_repo = MagicMock()
     service.parent_repo.get_by_user_id = AsyncMock(return_value=None)
@@ -111,7 +113,14 @@ async def test_verify_otp_returns_token_and_children_on_success(service):
     service.parent_repo.create_parent = AsyncMock(return_value=parent)
     service.parent_repo.get_students_by_parent_id = AsyncMock(return_value=[child])
 
-    access_token, refresh_token, aud, returned_user_id, children = await service.verify_otp(
+    (
+        access_token,
+        refresh_token,
+        aud,
+        returned_user_id,
+        parent_name,
+        children,
+    ) = await service.verify_otp(
         supabase=mock_supabase,
         db=MagicMock(),
         phone="9876543210",
@@ -123,7 +132,9 @@ async def test_verify_otp_returns_token_and_children_on_success(service):
     assert refresh_token == "refresh_tok_1234567890"
     assert aud == "authenticated"
     assert returned_user_id == user_id
+    assert parent_name == "Test Parent"
     assert len(children) == 1
+    assert children[0].email == "child@test.com"
 
 
 async def test_verify_otp_raises_value_error_when_no_user(service):
