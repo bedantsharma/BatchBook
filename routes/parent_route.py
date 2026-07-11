@@ -14,6 +14,7 @@ from routes.requests.join_institute_request import JoinInstituteRequest
 from routes.requests.otp_generate_request import OtpGenerateRequest
 from routes.requests.parent_verify_otp_request import ParentVerifyOtpRequest
 from routes.requests.refresh_token_request import RefreshTokenRequest
+from routes.requests.update_parent_request import UpdateParentRequest
 from routes.responses.institute_search_response import InstituteSearchResponse
 from routes.responses.parent_profile_response import ParentProfileResponse, StudentSummary
 from routes.responses.verify_parent_response import StudentSummaryInToken, VerifyParentResponse
@@ -133,6 +134,41 @@ async def get_parent(
         name=parent.name,
         phone_number=parent.phone_number,
         created_at=parent.created_at,
+        children=children_summary,
+    )
+
+
+@router.patch(
+    "/update",
+    summary="Update the authenticated parent's own profile (name)",
+    response_model=ParentProfileResponse,
+)
+async def update_parent(
+    update_request: UpdateParentRequest,
+    parent_service: ParentServiceDep,
+    db: AsyncSession = Depends(get_db),
+    user_id: UUID = Depends(_get_current_user_id),
+):
+    updates = update_request.model_dump(exclude_none=True)
+    updated = await parent_service.update_parent(db=db, user_id=user_id, updates=updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Parent record not found")
+    children = await parent_service.get_children(db=db, user_id=user_id)
+    children_summary = [
+        StudentSummary(
+            id=c.id,
+            name=c.name,
+            email=c.email,
+            fees_status=c.fees_status.value,
+            institute_id=c.institute_id,
+        )
+        for c in children
+    ]
+    return ParentProfileResponse(
+        id=updated.id,
+        name=updated.name,
+        phone_number=updated.phone_number,
+        created_at=updated.created_at,
         children=children_summary,
     )
 

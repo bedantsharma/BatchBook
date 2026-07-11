@@ -214,3 +214,66 @@ async def test_refresh_token_returns_401_on_failure(client, override_supabase):
     response = await client.post("/parent/refresh", json={"refresh_token": "bad_tok_1234567890"})
 
     assert response.status_code == 401
+
+
+# --- PATCH /parent/update ---
+
+async def test_update_parent_returns_updated_profile(client):
+    user_id = uuid4()
+    updated_parent = _make_parent_schema(user_id=user_id)
+    updated_parent.name = "New Name"
+
+    mock_service = MagicMock(spec=ParentService)
+    mock_service.get_current_user_id = AsyncMock(return_value=user_id)
+    mock_service.update_parent = AsyncMock(return_value=updated_parent)
+    mock_service.get_children = AsyncMock(return_value=[])
+
+    from app import app
+    app.dependency_overrides[get_parent_service] = lambda: mock_service
+
+    response = await client.patch(
+        "/parent/update",
+        json={"name": "New Name"},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "New Name"
+    call_kwargs = mock_service.update_parent.call_args.kwargs
+    assert call_kwargs["user_id"] == user_id
+    assert call_kwargs["updates"] == {"name": "New Name"}
+
+
+async def test_update_parent_returns_404_when_not_found(client):
+    user_id = uuid4()
+    mock_service = MagicMock(spec=ParentService)
+    mock_service.get_current_user_id = AsyncMock(return_value=user_id)
+    mock_service.update_parent = AsyncMock(return_value=None)
+
+    from app import app
+    app.dependency_overrides[get_parent_service] = lambda: mock_service
+
+    response = await client.patch(
+        "/parent/update",
+        json={"name": "New Name"},
+        headers={"Authorization": "Bearer sometoken"},
+    )
+
+    assert response.status_code == 404
+
+
+async def test_update_parent_returns_401_without_auth(client):
+    mock_service = MagicMock(spec=ParentService)
+    mock_service.get_current_user_id = AsyncMock(side_effect=Exception("bad token"))
+
+    from app import app
+    app.dependency_overrides[get_parent_service] = lambda: mock_service
+
+    response = await client.patch(
+        "/parent/update",
+        json={"name": "New Name"},
+        headers={"Authorization": "Bearer badtoken"},
+    )
+
+    assert response.status_code == 401
