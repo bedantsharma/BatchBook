@@ -2,6 +2,16 @@
 
 Date: 2026-07-23
 
+> **Amendment (post-implementation review):** every `url=str(request.url)` in this
+> document (Decisions, Section 2, Section 4) describes the *originally planned* shape —
+> full path + query string. Task-review found this duplicates the query string
+> unredacted next to the already-redacted `query_params` field in the same log line, a
+> real redaction bypass. The shipped code instead builds `url` as
+> `f"{request.url.scheme}://{request.url.netloc}{request.url.path}"` — scheme + host +
+> path, deliberately **without** the query string, which stays exclusively in the
+> (redacted) `query_params` field. See commit `32ea8a1` on
+> `feature/structured-json-logging-everywhere`.
+
 ## Problem
 
 `docs/superpowers/specs/2026-07-08-structured-logging-otel-design.md` shipped structured
