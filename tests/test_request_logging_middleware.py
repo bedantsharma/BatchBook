@@ -1,19 +1,12 @@
 """
-Regression tests for the OTEL_ENABLED request/response body capture path in
-app.py's log_and_handle_exceptions middleware.
-
-This path has no coverage in the default test run because conftest.py never
-sets OTEL_EXPORTER_OTLP_ENDPOINT, so telemetry.OTEL_ENABLED (and the copy
-imported into app.py's namespace) is always False. These tests monkeypatch
-app.OTEL_ENABLED directly (not telemetry.OTEL_ENABLED) since app.py did
-`from telemetry import OTEL_ENABLED`, which binds a separate name in app's
-own module namespace.
+Regression tests for app.py's log_and_handle_exceptions middleware, which
+unconditionally captures and logs redacted request/response bodies and
+query/path params for every request in every environment.
 """
 
 import pytest
 from fastapi import APIRouter, Request
 
-import app as app_module
 from app import app
 
 
@@ -43,11 +36,7 @@ def echo_route():
     ]
 
 
-async def test_middleware_survives_invalid_json_body_when_otel_enabled(
-    client, echo_route, monkeypatch
-):
-    monkeypatch.setattr(app_module, "OTEL_ENABLED", True)
-
+async def test_middleware_survives_invalid_json_body(client, echo_route):
     response = await client.post(
         "/echo-body",
         content=b"not valid json{",
@@ -59,33 +48,25 @@ async def test_middleware_survives_invalid_json_body_when_otel_enabled(
     assert response.status_code in (200, 401, 404, 422, 500)
 
 
-async def test_middleware_survives_non_utf8_body_when_otel_enabled(
-    client, echo_route, monkeypatch
-):
-    monkeypatch.setattr(app_module, "OTEL_ENABLED", True)
-
+async def test_middleware_survives_non_utf8_body(client, echo_route):
     response = await client.post(
         "/echo-body",
         content=b"\xff\xfe\x00\x01invalid",
         headers={"Content-Type": "application/json"},
     )
 
-    # Before the fix, json.loads() on non-UTF-8 bytes raised UnicodeDecodeError
-    # outside the middleware's try block (request side) or was mis-caught by
-    # the broad `except Exception` and turned into a fabricated 500 (response
-    # side). Either way the request must complete with a real HTTP response.
+    # json.loads() on non-UTF-8 bytes raises UnicodeDecodeError; the
+    # middleware must catch it (request side) and not mis-report it as a
+    # fabricated 500 (response side). Either way the request must complete
+    # with a real HTTP response.
     assert response.status_code in (200, 401, 404, 422, 500)
 
 
-async def test_middleware_redacts_sensitive_fields_in_bound_log_record(
-    client, monkeypatch
-):
+async def test_middleware_redacts_sensitive_fields_in_bound_log_record(client):
     """A real JSON request body flows through the actual middleware +
     logger.bind path (not the isolated request_logging.py unit tests) and
     comes out redacted."""
     from loguru import logger
-
-    monkeypatch.setattr(app_module, "OTEL_ENABLED", True)
 
     capture = _LogCapture()
     sink_id = logger.add(capture, level="INFO")
@@ -113,21 +94,35 @@ async def test_middleware_redacts_sensitive_fields_in_bound_log_record(
     assert "super_secret_marker_value" not in request_body
 
 
-async def test_middleware_response_body_survives_drain_and_reconstruct(
-    client, monkeypatch
-):
+async def test_middleware_response_body_survives_drain_and_reconstruct(client):
     """Proves the client still receives the correct, unmangled response body
     after the middleware drains response.body_iterator and reconstructs it
     via iterate_in_threadpool."""
-    monkeypatch.setattr(app_module, "OTEL_ENABLED", False)
-    baseline = await client.get("/public/institute/does-not-exist")
-    assert baseline.status_code == 404
-    assert baseline.json() == {"detail": "No public site configured for this slug"}
-
-    monkeypatch.setattr(app_module, "OTEL_ENABLED", True)
     response = await client.get("/public/institute/does-not-exist")
 
-    assert response.status_code == baseline.status_code == 404
-    assert response.json() == baseline.json() == {
-        "detail": "No public site configured for this slug"
-    }
+    assert response.status_code == 404
+    assert response.json() == {"detail": "No public site configured for this slug"}
+
+
+async def test_middleware_logs_url_without_query_string(client):
+    """The url field carries scheme+host+path only; query params are logged
+    separately (and redacted) via the query_params field, so a secret in a
+    query string is never duplicated unredacted in url."""
+    from loguru import logger
+
+    capture = _LogCapture()
+    sink_id = logger.add(capture, level="INFO")
+    try:
+        await client.get("/public/institute/does-not-exist?token=super-secret")
+    finally:
+        logger.remove(sink_id)
+
+    completed_records = [
+        r for r in capture.records if r["message"] == "request completed"
+    ]
+    assert completed_records, "expected a 'request completed' log record"
+    record = completed_records[-1]["extra"]
+    assert "/public/institute/does-not-exist" in record["url"]
+    assert "token" not in record["url"]
+    assert "super-secret" not in record["url"]
+    assert "[REDACTED]" in record["query_params"]
