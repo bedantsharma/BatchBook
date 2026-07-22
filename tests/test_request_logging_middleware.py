@@ -104,15 +104,16 @@ async def test_middleware_response_body_survives_drain_and_reconstruct(client):
     assert response.json() == {"detail": "No public site configured for this slug"}
 
 
-async def test_middleware_logs_full_url_with_query_params(client):
-    """The url field should contain the full path + query string, not just
-    the bare path."""
+async def test_middleware_logs_url_without_query_string(client):
+    """The url field carries scheme+host+path only; query params are logged
+    separately (and redacted) via the query_params field, so a secret in a
+    query string is never duplicated unredacted in url."""
     from loguru import logger
 
     capture = _LogCapture()
     sink_id = logger.add(capture, level="INFO")
     try:
-        await client.get("/public/institute/does-not-exist?foo=bar")
+        await client.get("/public/institute/does-not-exist?token=super-secret")
     finally:
         logger.remove(sink_id)
 
@@ -120,4 +121,8 @@ async def test_middleware_logs_full_url_with_query_params(client):
         r for r in capture.records if r["message"] == "request completed"
     ]
     assert completed_records, "expected a 'request completed' log record"
-    assert "foo=bar" in completed_records[-1]["extra"]["url"]
+    record = completed_records[-1]["extra"]
+    assert "/public/institute/does-not-exist" in record["url"]
+    assert "token" not in record["url"]
+    assert "super-secret" not in record["url"]
+    assert "[REDACTED]" in record["query_params"]
