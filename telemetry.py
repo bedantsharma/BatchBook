@@ -24,6 +24,8 @@ OTEL_ENABLED = bool(os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
 
 def setup_telemetry(app) -> None:
     """Instrument the FastAPI app and start exporting traces + metrics via OTLP."""
+    configure_logging()
+
     if not OTEL_ENABLED:
         return
 
@@ -49,33 +51,15 @@ def setup_telemetry(app) -> None:
     FastAPIInstrumentor.instrument_app(app)
     HTTPXClientInstrumentor().instrument()
 
-    configure_logging()
-
 
 def configure_logging() -> None:
-    """Reconfigure loguru: JSON stdout + ship to Grafana Cloud (Loki) via OTLP.
+    """Reconfigure loguru: JSON stdout always; ship to Grafana Cloud (Loki) via
+    OTLP only when OTEL_ENABLED.
 
     Mutates the shared loguru core via configure(), so every existing
     `from loguru import logger` call site across the codebase is affected —
-    no per-file changes needed. No-ops unless OTEL_ENABLED.
+    no per-file changes needed.
     """
-    if not OTEL_ENABLED:
-        return
-
-    from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
-    from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-    from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-
-    resource = Resource.create(
-        {
-            "service.name": os.getenv("OTEL_SERVICE_NAME", "batchbook-backend"),
-            "deployment.environment": os.getenv("ENVIRONMENT", "development"),
-        }
-    )
-
-    logger_provider = LoggerProvider(resource=resource)
-    logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter()))
-    otel_handler = LoggingHandler(logger_provider=logger_provider)
 
     def inject_trace_context(record):
         span = trace.get_current_span()
@@ -100,13 +84,34 @@ def configure_logging() -> None:
         }
         print(json.dumps(payload, default=str))
 
-    logger.configure(
-        patcher=inject_trace_context,
-        handlers=[
-            {"sink": json_sink, "level": "INFO"},
-            {"sink": otel_handler, "level": "INFO"},
-        ],
-    )
+    handlers = [{"sink": json_sink, "level": "INFO"}]
+
+    if OTEL_ENABLED:
+        from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+        from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+
+        resource = Resource.create(
+            {
+                "service.name": os.getenv("OTEL_SERVICE_NAME", "batchbook-backend"),
+                "deployment.environment": os.getenv("ENVIRONMENT", "development"),
+            }
+        )
+
+        logger_provider = LoggerProvider(resource=resource)
+        logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter()))
+        otel_handler = LoggingHandler(logger_provider=logger_provider)
+
+        # Explicit format is required: without it, loguru's StandardSink
+        # pre-renders its own default text format ("{time} | {level} | ... -
+        # {message}") into the message it hands to any logging.Handler sink,
+        # and that becomes the OTel LogRecord body shipped to Loki. This is
+        # what caused Grafana Cloud log lines to not be JSON even with the
+        # OTLP pipeline correctly wired — verified live against the
+        # grafanacloud-logs Loki datasource in this session.
+        handlers.append({"sink": otel_handler, "level": "INFO", "format": "{message}"})
+
+    logger.configure(patcher=inject_trace_context, handlers=handlers)
 
 
 def instrument_engine(engine) -> None:
