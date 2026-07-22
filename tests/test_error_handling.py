@@ -2,12 +2,20 @@
 Tests for the request logging + global exception handling middleware in app.py.
 """
 
-from unittest.mock import patch
-
 import pytest
 from fastapi import APIRouter
 
 from app import app
+
+
+class _LogCapture:
+    """Collects loguru records emitted while this sink is attached."""
+
+    def __init__(self):
+        self.records = []
+
+    def __call__(self, message):
+        self.records.append(message.record)
 
 
 @pytest.fixture
@@ -31,25 +39,51 @@ async def test_unhandled_exception_returns_500(client, crash_route):
 
 
 async def test_unhandled_exception_logs_error(client, crash_route):
-    with patch("app.logger") as mock_logger:
+    from loguru import logger
+
+    capture = _LogCapture()
+    sink_id = logger.add(capture, level="INFO")
+    try:
         await client.get("/crash")
-        error_calls = [str(c) for c in mock_logger.error.call_args_list]
-        assert any("RuntimeError" in c for c in error_calls)
-        assert any("crash" in c for c in error_calls)
+    finally:
+        logger.remove(sink_id)
+
+    failed_records = [r for r in capture.records if r["message"] == "request failed"]
+    assert failed_records, "expected a 'request failed' log record"
+    assert "RuntimeError" in failed_records[-1]["extra"]["exception"]
+    assert "crash" in failed_records[-1]["extra"]["url"]
 
 
 async def test_middleware_logs_successful_request(client):
-    with patch("app.logger") as mock_logger:
+    from loguru import logger
+
+    capture = _LogCapture()
+    sink_id = logger.add(capture, level="INFO")
+    try:
         response = await client.get("/docs")
         assert response.status_code == 200
-        info_calls = [str(c) for c in mock_logger.info.call_args_list]
-        assert any("GET" in c and "/docs" in c and "200" in c for c in info_calls)
+    finally:
+        logger.remove(sink_id)
+
+    completed_records = [r for r in capture.records if r["message"] == "request completed"]
+    assert completed_records, "expected a 'request completed' log record"
+    record = completed_records[-1]
+    assert record["extra"]["method"] == "GET"
+    assert "/docs" in record["extra"]["url"]
+    assert record["extra"]["status_code"] == 200
 
 
 async def test_middleware_logs_404_as_404_not_500(client):
-    with patch("app.logger") as mock_logger:
+    from loguru import logger
+
+    capture = _LogCapture()
+    sink_id = logger.add(capture, level="INFO")
+    try:
         response = await client.get("/nonexistent-route-xyz")
         assert response.status_code == 404
-        info_calls = [str(c) for c in mock_logger.info.call_args_list]
-        assert any("404" in c for c in info_calls)
-        assert not any("500" in c for c in info_calls)
+    finally:
+        logger.remove(sink_id)
+
+    completed_records = [r for r in capture.records if r["message"] == "request completed"]
+    assert completed_records, "expected a 'request completed' log record"
+    assert completed_records[-1]["extra"]["status_code"] == 404
