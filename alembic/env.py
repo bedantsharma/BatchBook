@@ -13,7 +13,11 @@ from config import get_settings
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# alembic.ini is parsed by configparser, which treats "%" as interpolation
+# syntax. A percent-encoded character in the password (e.g. "%24" for "$")
+# would otherwise blow up with "invalid interpolation syntax" before a single
+# migration runs. Doubling escapes it; configparser collapses it back.
+config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
