@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     db_pool_size: int = 5
     db_max_overflow: int = 10
     db_pool_recycle: int = 1800
+    db_pool_pre_ping: bool = True
+    # Emits a structured log line per pool connect/checkin/checkout/close.
+    # Cheap at current traffic and the only way to prove connection reuse.
+    db_log_pool_events: bool = True
 
 
 @lru_cache
