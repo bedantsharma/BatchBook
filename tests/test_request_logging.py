@@ -1,6 +1,8 @@
 import json
 
-from request_logging import MAX_LOGGED_BYTES, capture_and_redact, redact
+import pytest
+
+from request_logging import MAX_LOGGED_BYTES, REDACTED_FIELDS, capture_and_redact, redact
 
 
 def test_redact_replaces_top_level_secret_field():
@@ -69,6 +71,59 @@ def test_capture_and_redact_truncated_output_is_valid_json():
     parsed = json.loads(result)
     assert isinstance(parsed, str)
     assert "truncated" in parsed
+
+
+def test_redact_hides_the_jwt_returned_by_verify_otp():
+    """Regression: production logs contained complete, usable bearer tokens.
+
+    REDACTED_FIELDS listed "access_token", but every Verify*Response
+    serialises the JWT under "auth_token", so it was written to the
+    response_body log field in plaintext and was valid until expiry.
+    """
+    verify_otp_response = {
+        "auth_token": "eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiI4YzRlZWU2NiJ9.VbEz3gXBF3g",
+        "refresh_token": "z7x2m9qkpl",
+        "aud": "authenticated",
+        "teacher_id": "8c4eee66-d3cb-41c9-ba34-19cf7731d4c8",
+    }
+
+    redacted = redact(verify_otp_response)
+
+    assert redacted["auth_token"] == "[REDACTED]"
+    assert redacted["refresh_token"] == "[REDACTED]"
+    # Non-secret fields must survive -- the logs are useless otherwise.
+    assert redacted["aud"] == "authenticated"
+    assert redacted["teacher_id"] == "8c4eee66-d3cb-41c9-ba34-19cf7731d4c8"
+
+
+@pytest.mark.parametrize(
+    "response_module",
+    [
+        "verify_owner_response",
+        "verify_parent_response",
+        "verify_teacher_response",
+        "verify_user_response",
+    ],
+)
+def test_every_token_field_on_auth_responses_is_redacted(response_module):
+    """Guards against a new token field being added without redacting it."""
+    import importlib
+
+    module = importlib.import_module(f"routes.responses.{response_module}")
+
+    from pydantic import BaseModel
+
+    token_fields = {
+        name
+        for obj in vars(module).values()
+        if isinstance(obj, type) and issubclass(obj, BaseModel) and obj is not BaseModel
+        for name in obj.model_fields
+        if "token" in name.lower()
+    }
+
+    assert token_fields, f"expected {response_module} to expose at least one token field"
+    unredacted = token_fields - REDACTED_FIELDS
+    assert not unredacted, f"{response_module} leaks {unredacted} into request logs"
 
 
 def test_capture_and_redact_bounds_size_regardless_of_content():

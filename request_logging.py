@@ -6,6 +6,14 @@ REDACTED_FIELDS = {
     "token",
     "refresh_token",
     "access_token",
+    # The name every Verify*Response actually serialises the JWT under. Without
+    # this, POST /{owner,parent,student,teacher}/verify_otp wrote a complete,
+    # usable bearer token into the response-body log field in plaintext.
+    "auth_token",
+    "id_token",
+    "provider_token",
+    "provider_refresh_token",
+    "authorization",
     "password",
     "otp",
     "secret",
