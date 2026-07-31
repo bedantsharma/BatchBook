@@ -7,10 +7,13 @@ governs that behaviour so a future edit can't silently drop pooling again.
 """
 
 from config import Settings
-from db.session import build_engine_kwargs, is_pooled_postgres
+from db.session import build_engine_kwargs, uses_transaction_pooler
 
-POOLER_URL = (
-    "postgresql+asyncpg://postgres.abc:pw@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres"
+SESSION_POOLER_URL = (
+    "postgresql+asyncpg://postgres.abc:pw@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
+)
+TXN_POOLER_URL = (
+    "postgresql+asyncpg://postgres.abc:pw@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres"
 )
 DIRECT_URL = "postgresql+asyncpg://postgres:pw@db.abc.supabase.co:5432/postgres"
 
@@ -25,15 +28,20 @@ def _settings(database_url: str, **overrides) -> Settings:
     return Settings(**{**defaults, **overrides})
 
 
-class TestIsPooledPostgres:
-    def test_detects_supavisor_pooler_host(self):
-        assert is_pooled_postgres(POOLER_URL) is True
+class TestUsesTransactionPooler:
+    def test_detects_transaction_mode_port(self):
+        assert uses_transaction_pooler(TXN_POOLER_URL) is True
 
-    def test_direct_connection_is_not_pooled(self):
-        assert is_pooled_postgres(DIRECT_URL) is False
+    def test_session_mode_pooler_is_not_transaction_mode(self):
+        # Same host, port 5432 -- one dedicated backend per connection, so
+        # prepared statements stay valid and the cache must NOT be disabled.
+        assert uses_transaction_pooler(SESSION_POOLER_URL) is False
 
-    def test_sqlite_is_not_pooled(self):
-        assert is_pooled_postgres("sqlite+aiosqlite:///:memory:") is False
+    def test_direct_connection_is_not_transaction_mode(self):
+        assert uses_transaction_pooler(DIRECT_URL) is False
+
+    def test_sqlite_is_not_transaction_mode(self):
+        assert uses_transaction_pooler("sqlite+aiosqlite:///:memory:") is False
 
 
 class TestBuildEngineKwargs:
@@ -65,12 +73,19 @@ class TestBuildEngineKwargs:
 
         assert kwargs["pool_pre_ping"] is False
 
-    def test_pooler_url_disables_asyncpg_statement_cache(self):
-        # Supavisor can hand the same client a different backend between
+    def test_transaction_pooler_disables_asyncpg_statement_cache(self):
+        # Transaction mode can hand the same client a different backend between
         # statements; a per-connection prepared-statement cache breaks on that.
-        kwargs = build_engine_kwargs(_settings(POOLER_URL))
+        kwargs = build_engine_kwargs(_settings(TXN_POOLER_URL))
 
         assert kwargs["connect_args"] == {"statement_cache_size": 0}
+
+    def test_session_pooler_keeps_statement_cache(self):
+        # Session mode pins one backend per connection, so the cache is safe --
+        # and worth keeping, since it saves a round trip per repeated query.
+        kwargs = build_engine_kwargs(_settings(SESSION_POOLER_URL))
+
+        assert "connect_args" not in kwargs
 
     def test_direct_url_keeps_statement_cache(self):
         # No pooler in front means prepared statements are safe and worth keeping.

@@ -10,18 +10,22 @@ from telemetry import instrument_engine
 # Supabase routes Postgres through Supavisor, its connection pooler:
 #   port 5432 on *.pooler.supabase.com -> session mode
 #   port 6543 on *.pooler.supabase.com -> transaction mode
-# asyncpg caches server-side prepared statements per connection, which breaks
-# against a pooler that can hand the same client a different backend between
-# statements ("prepared statement _pgN already exists"). Disabling the cache is
-# mandatory for transaction mode and harmless in session mode -- asyncpg falls
-# back to unnamed prepared statements, which cost one round trip per query
-# instead of the two a prepare+execute pair costs on a cold connection.
-_SUPAVISOR_HOST = "pooler.supabase.com"
+#
+# asyncpg caches server-side prepared statements per connection. In transaction
+# mode the pooler can hand the same client a different backend between
+# statements, so those cached statements vanish underneath it ("prepared
+# statement _pgN already exists" / "does not exist") -- the cache must be off.
+#
+# Session mode keeps one dedicated backend for the life of the connection, so
+# the cache is both safe and worth keeping: a cached statement costs one round
+# trip instead of the two a prepare+execute pair costs on first use. That is
+# why this keys off the port and not merely the pooler hostname.
+_TRANSACTION_POOLER_PORT = ":6543"
 
 
-def is_pooled_postgres(database_url: str) -> bool:
-    """True when the URL points at Supabase's Supavisor pooler."""
-    return _SUPAVISOR_HOST in database_url
+def uses_transaction_pooler(database_url: str) -> bool:
+    """True when the URL points at Supavisor in transaction mode (port 6543)."""
+    return _TRANSACTION_POOLER_PORT in database_url
 
 
 def build_engine_kwargs(settings: Settings) -> dict:
@@ -46,7 +50,7 @@ def build_engine_kwargs(settings: Settings) -> dict:
         }
     )
 
-    if is_pooled_postgres(database_url):
+    if uses_transaction_pooler(database_url):
         kwargs["connect_args"] = {"statement_cache_size": 0}
 
     return kwargs
