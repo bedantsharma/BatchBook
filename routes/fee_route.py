@@ -527,11 +527,15 @@ async def send_fee_reminders_for_all(
     owner_service: OwnerServiceDep,
     institute_service: InstituteServiceDep,
     month: str = Query(..., examples=["2026-05"], description="Month in YYYY-MM format"),
+    batch_id: int | None = Query(
+        None,
+        description="If set, only remind students in this batch. Omit for institute-wide.",
+    ),
     db: AsyncSession = Depends(get_db),
     owner_user_id: UUID = Depends(_get_current_owner_user_id),
 ):
     """Queue WhatsApp fee_reminder messages for every unpaid or partially-paid record
-    in the institute for the given month.
+    in the institute (or, if ``batch_id`` is given, in that batch only) for the given month.
 
     Returns 202 Accepted with the count of reminders queued. Each WhatsApp call
     happens in the background so this endpoint returns instantly regardless of
@@ -549,6 +553,9 @@ async def send_fee_reminders_for_all(
     )
     month_date = _parse_month(month)
 
+    if batch_id is not None:
+        await _verify_batch_belongs_to_institute(db, batch_id, institute_id)
+
     inst = await institute_service.institute_repo.get_by_id(db, institute_id)
     join_url = (
         f"{get_settings().frontend_base_url}/join/{inst.join_code}"
@@ -556,7 +563,7 @@ async def send_fee_reminders_for_all(
         else None
     )
 
-    result = await db.execute(
+    query = (
         select(FeeRecordSchema, EnrollmentSchema, StudentSchema, ParentSchema, BatchSchema)
         .join(EnrollmentSchema, FeeRecordSchema.enrollment_id == EnrollmentSchema.id)
         .join(StudentSchema, EnrollmentSchema.student_id == StudentSchema.id)
@@ -568,6 +575,10 @@ async def send_fee_reminders_for_all(
             FeeRecordSchema.status != FeeStatus.FULLY_PAID,
         )
     )
+    if batch_id is not None:
+        query = query.where(EnrollmentSchema.batch_id == batch_id)
+
+    result = await db.execute(query)
 
     queued = 0
     for fee_record, enrollment, student, parent, batch in result.all():
@@ -596,4 +607,4 @@ async def send_fee_reminders_for_all(
         )
         queued += 1
 
-    return {"detail": f"{queued} reminder(s) queued", "month": month}
+    return {"detail": f"{queued} reminder(s) queued", "month": month, "batch_id": batch_id}

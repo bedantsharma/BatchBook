@@ -5,7 +5,7 @@ Supabase, OwnerService, InstituteService, FeeService, and the DB
 are all mocked so no real network or database calls are made.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -13,11 +13,15 @@ from uuid import uuid4
 import pytest
 
 from clients.supabase_client import get_supabase_client
-from models.batch_base import BatchSchema
+from models.batch_base import BatchSchema, BatchStatus
+from models.enrollment_base import EnrollmentSchema
 from models.fee_record_base import FeeRecordSchema, FeeStatus
 from models.fee_structure_base import FeeStructureSchema
 from models.institute_base import InstituteSchema
 from models.owner_base import OwnerSchema
+from models.parent_base import ParentSchema
+from models.student_base import StudentSchema
+from services import notification_service
 from services.fee_service import FeeService, get_fee_service
 from services.institute_service import InstituteService, get_institute_service
 from services.owner_service import OwnerService, get_owner_service
@@ -584,3 +588,293 @@ async def test_get_payment_link_flags_needs_reconnect_on_razorpay_auth_failure(c
     assert resp.status_code == 503
     assert "reconnect" in resp.json()["detail"].lower()
     institute_svc.flag_needs_reconnect.assert_called_once_with(mock_db, 10)
+
+
+# ─── POST /fee/remind-all ─────────────────────────────────────────────────────
+
+
+def _seed_batch(institute_id, name="Class 10 Maths"):
+    return BatchSchema(
+        institute_id=institute_id,
+        name=name,
+        subject="Maths",
+        start_time=time(16, 0),
+        end_time=time(17, 0),
+        days_of_week=["MON", "WED", "FRI"],
+        max_capacity=30,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 12, 31),
+        status=BatchStatus.ACTIVE,
+    )
+
+
+def _seed_parent(phone_number, name, verified=True):
+    return ParentSchema(
+        phone_number=phone_number,
+        name=name,
+        user_id=uuid4() if verified else None,
+    )
+
+
+def _seed_student(name, parent_id=None, institute_id=None):
+    return StudentSchema(name=name, parent_id=parent_id, institute_id=institute_id)
+
+
+def _seed_enrollment(student_id, batch_id, due_day=5):
+    return EnrollmentSchema(student_id=student_id, batch_id=batch_id, due_day=due_day)
+
+
+def _seed_fee_record(
+    enrollment_id,
+    month=date(2026, 5, 1),
+    amount_due=Decimal("1500.00"),
+    amount_paid=Decimal("0"),
+    status=FeeStatus.NOT_PAID,
+):
+    return FeeRecordSchema(
+        enrollment_id=enrollment_id,
+        month=month,
+        amount_due=amount_due,
+        amount_paid=amount_paid,
+        status=status,
+    )
+
+
+@pytest.fixture
+def fake_dispatch(monkeypatch):
+    calls = []
+
+    async def _fake(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(notification_service, "dispatch_in_background", _fake)
+    return calls
+
+
+def _setup_remind_all_auth(db_session, teacher_id, owner_id=1, institute_id=10):
+    """Mock auth/institute resolution the same way other tests in this file do,
+    but leave the DB itself real so the route's own query runs for real."""
+    owner_svc = MagicMock(spec=OwnerService)
+    owner_svc.get_current_teacher_id = AsyncMock(return_value=teacher_id)
+    owner_svc.get_owner_by_teacher_id = AsyncMock(
+        return_value=_make_owner(teacher_id, owner_id)
+    )
+
+    institute = _make_institute(owner_id, institute_id)
+    institute.join_code = None  # keep join_url building deterministic (None)
+
+    institute_svc = MagicMock(spec=InstituteService)
+    institute_svc.get_by_owner_id = AsyncMock(return_value=institute)
+    institute_svc.institute_repo = MagicMock()
+    institute_svc.institute_repo.get_by_id = AsyncMock(return_value=institute)
+
+    return owner_svc, institute_svc
+
+
+async def test_remind_all_institute_wide_queues_unpaid_record(
+    client, db_session, fake_dispatch
+):
+    teacher_id = uuid4()
+    owner_svc, institute_svc = _setup_remind_all_auth(db_session, teacher_id)
+
+    batch = _seed_batch(institute_id=10)
+    db_session.add(batch)
+    await db_session.flush()
+
+    parent = _seed_parent("9876543210", "Verified Parent")
+    db_session.add(parent)
+    await db_session.flush()
+
+    student = _seed_student("Rahul", parent_id=parent.id, institute_id=10)
+    db_session.add(student)
+    await db_session.flush()
+
+    enrollment = _seed_enrollment(student.id, batch.id)
+    db_session.add(enrollment)
+    await db_session.flush()
+
+    fee_record = _seed_fee_record(enrollment.id)
+    db_session.add(fee_record)
+    await db_session.commit()
+
+    fee_svc = MagicMock(spec=FeeService)
+
+    from app import app
+
+    app.dependency_overrides[get_owner_service] = lambda: owner_svc
+    app.dependency_overrides[get_institute_service] = lambda: institute_svc
+    app.dependency_overrides[get_fee_service] = lambda: fee_svc
+
+    resp = await client.post(
+        "/fee/remind-all",
+        params={"month": "2026-05"},
+        headers={"authorization": "Bearer test-token"},
+    )
+
+    app.dependency_overrides.clear()
+    assert resp.status_code == 202
+    data = resp.json()
+    assert data["detail"] == "1 reminder(s) queued"
+    assert data["batch_id"] is None
+    assert len(fake_dispatch) == 1
+    assert fake_dispatch[0]["student_id"] == student.id
+
+
+async def test_remind_all_scoped_to_batch_excludes_other_batches(
+    client, db_session, fake_dispatch
+):
+    teacher_id = uuid4()
+    owner_svc, institute_svc = _setup_remind_all_auth(db_session, teacher_id)
+
+    batch_a = _seed_batch(institute_id=10, name="Batch A")
+    batch_b = _seed_batch(institute_id=10, name="Batch B")
+    db_session.add_all([batch_a, batch_b])
+    await db_session.flush()
+
+    parent_a = _seed_parent("9876543210", "Parent A")
+    parent_b = _seed_parent("9876543211", "Parent B")
+    db_session.add_all([parent_a, parent_b])
+    await db_session.flush()
+
+    student_a = _seed_student("Student A", parent_id=parent_a.id, institute_id=10)
+    student_b = _seed_student("Student B", parent_id=parent_b.id, institute_id=10)
+    db_session.add_all([student_a, student_b])
+    await db_session.flush()
+
+    enrollment_a = _seed_enrollment(student_a.id, batch_a.id)
+    enrollment_b = _seed_enrollment(student_b.id, batch_b.id)
+    db_session.add_all([enrollment_a, enrollment_b])
+    await db_session.flush()
+
+    db_session.add_all(
+        [_seed_fee_record(enrollment_a.id), _seed_fee_record(enrollment_b.id)]
+    )
+    await db_session.commit()
+
+    fee_svc = MagicMock(spec=FeeService)
+
+    from app import app
+
+    app.dependency_overrides[get_owner_service] = lambda: owner_svc
+    app.dependency_overrides[get_institute_service] = lambda: institute_svc
+    app.dependency_overrides[get_fee_service] = lambda: fee_svc
+
+    resp = await client.post(
+        "/fee/remind-all",
+        params={"month": "2026-05", "batch_id": batch_a.id},
+        headers={"authorization": "Bearer test-token"},
+    )
+
+    app.dependency_overrides.clear()
+    assert resp.status_code == 202
+    data = resp.json()
+    assert data["detail"] == "1 reminder(s) queued"
+    assert data["batch_id"] == batch_a.id
+    assert len(fake_dispatch) == 1
+    assert fake_dispatch[0]["student_id"] == student_a.id
+
+
+async def test_remind_all_batch_in_other_institute_returns_403(
+    client, db_session, fake_dispatch
+):
+    teacher_id = uuid4()
+    owner_svc, institute_svc = _setup_remind_all_auth(db_session, teacher_id, institute_id=10)
+
+    foreign_batch = _seed_batch(institute_id=99, name="Someone Else's Batch")
+    db_session.add(foreign_batch)
+    await db_session.commit()
+
+    fee_svc = MagicMock(spec=FeeService)
+
+    from app import app
+
+    app.dependency_overrides[get_owner_service] = lambda: owner_svc
+    app.dependency_overrides[get_institute_service] = lambda: institute_svc
+    app.dependency_overrides[get_fee_service] = lambda: fee_svc
+
+    resp = await client.post(
+        "/fee/remind-all",
+        params={"month": "2026-05", "batch_id": foreign_batch.id},
+        headers={"authorization": "Bearer test-token"},
+    )
+
+    app.dependency_overrides.clear()
+    assert resp.status_code == 403
+    assert len(fake_dispatch) == 0
+
+
+async def test_remind_all_nonexistent_batch_returns_404(client, db_session, fake_dispatch):
+    teacher_id = uuid4()
+    owner_svc, institute_svc = _setup_remind_all_auth(db_session, teacher_id)
+
+    fee_svc = MagicMock(spec=FeeService)
+
+    from app import app
+
+    app.dependency_overrides[get_owner_service] = lambda: owner_svc
+    app.dependency_overrides[get_institute_service] = lambda: institute_svc
+    app.dependency_overrides[get_fee_service] = lambda: fee_svc
+
+    resp = await client.post(
+        "/fee/remind-all",
+        params={"month": "2026-05", "batch_id": 999999},
+        headers={"authorization": "Bearer test-token"},
+    )
+
+    app.dependency_overrides.clear()
+    assert resp.status_code == 404
+    assert len(fake_dispatch) == 0
+
+
+async def test_remind_all_skips_record_with_no_verified_phone(
+    client, db_session, fake_dispatch
+):
+    teacher_id = uuid4()
+    owner_svc, institute_svc = _setup_remind_all_auth(db_session, teacher_id)
+
+    batch = _seed_batch(institute_id=10)
+    db_session.add(batch)
+    await db_session.flush()
+
+    parent = _seed_parent("9876543210", "Verified Parent")
+    db_session.add(parent)
+    await db_session.flush()
+
+    student_with_parent = _seed_student("Has Parent", parent_id=parent.id, institute_id=10)
+    student_without_parent = _seed_student("No Parent", parent_id=None, institute_id=10)
+    db_session.add_all([student_with_parent, student_without_parent])
+    await db_session.flush()
+
+    enrollment_with_parent = _seed_enrollment(student_with_parent.id, batch.id)
+    enrollment_without_parent = _seed_enrollment(student_without_parent.id, batch.id)
+    db_session.add_all([enrollment_with_parent, enrollment_without_parent])
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            _seed_fee_record(enrollment_with_parent.id),
+            _seed_fee_record(enrollment_without_parent.id),
+        ]
+    )
+    await db_session.commit()
+
+    fee_svc = MagicMock(spec=FeeService)
+
+    from app import app
+
+    app.dependency_overrides[get_owner_service] = lambda: owner_svc
+    app.dependency_overrides[get_institute_service] = lambda: institute_svc
+    app.dependency_overrides[get_fee_service] = lambda: fee_svc
+
+    resp = await client.post(
+        "/fee/remind-all",
+        params={"month": "2026-05", "batch_id": batch.id},
+        headers={"authorization": "Bearer test-token"},
+    )
+
+    app.dependency_overrides.clear()
+    assert resp.status_code == 202
+    data = resp.json()
+    assert data["detail"] == "1 reminder(s) queued"
+    assert len(fake_dispatch) == 1
+    assert fake_dispatch[0]["student_id"] == student_with_parent.id
