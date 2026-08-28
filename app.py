@@ -21,6 +21,7 @@ from routes.attendance_route import router as attendance_router
 from routes.batch_route import router as batch_router
 from routes.enrollment_route import router as enrollment_router
 from routes.fee_route import router as fee_router
+from routes.health_route import router as health_router
 from routes.owner_route import router as owner_router
 from routes.parent_route import router as parent_router
 from routes.public_route import router as public_router
@@ -172,3 +173,4 @@ app.include_router(router=admin_router)
 app.include_router(router=test_score_router)
 app.include_router(router=webhook_router)
 app.include_router(router=public_router)
+app.include_router(router=health_router)
