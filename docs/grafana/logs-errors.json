@@ -1,0 +1,1058 @@
+{
+  "uid": "batchbook-logs-errors",
+  "title": "BatchBook — Logs & Errors (What Breaks)",
+  "description": "Answers one question: what is failing in BatchBook, and where in the code. Two kinds of noise are filtered out: the Render /docs health probe, and internet bot scanners probing for /.env and similar. Both are surfaced separately at the bottom rather than hidden.",
+  "tags": [
+    "batchbook",
+    "logs"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "refresh": "1m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "title": "BatchBook dashboards",
+      "tags": [
+        "batchbook"
+      ],
+      "asDropdown": true,
+      "includeVars": true,
+      "keepTime": true,
+      "icon": "external link"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "grafanacloud-logs"
+        },
+        "definition": "label_values(service_name)",
+        "query": {
+          "label": "service_name",
+          "refId": "var-service",
+          "stream": "",
+          "type": 1
+        },
+        "refresh": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "batchbook-backend-production",
+          "value": "batchbook-backend-production"
+        },
+        "options": []
+      },
+      {
+        "name": "search",
+        "label": "Free-text filter",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Application log lines",
+      "description": "All log lines in range, excluding the /docs health probe. This is your real log volume.",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
+          "expr": "sum(count_over_time({service_name=\"$service\"} | extra_path != \"/docs\" [$__range]))",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Failed app requests (4xx + 5xx)",
+      "description": "Errors on real BatchBook endpoints only. Bot scanner 404s are excluded — see the scanner panel lower down. These are logged at INFO level by the request middleware, so severity alone will not find them; the status code is what matters.",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "orange",
+                "value": 25
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
+          "expr": "sum(count_over_time({service_name=\"$service\"} | extra_path != \"/docs\" | extra_status_code =~ \"[45]..\" | extra_path =~ \"^/(admin|attendance|batch|enrollment|fee|owner|parent|public|scores|student|teacher|webhooks)($|/.*)\" | extra_path !~ \".*\\\\.[a-zA-Z0-9]+$\" [$__range]))",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Server errors (5xx)",
+      "description": "Requests that returned 5xx. Any non-zero value here is a bug in BatchBook, not a client mistake.",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
+          "expr": "sum(count_over_time({service_name=\"$service\"} | extra_path != \"/docs\" | extra_status_code =~ \"5..\" [$__range]))",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Unhandled exceptions",
+      "description": "Log lines at ERROR severity. These come from the catch-all in app.py:log_and_handle_exceptions — an exception escaped a route handler and the client got a generic 500. Zero is the number you want here.",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
+          "expr": "sum(count_over_time({service_name=\"$service\", severity_text=~\"ERROR|CRITICAL\"} [$__range]))",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Failed-auth attempts (401)",
+      "description": "Wrong or expired OTP submissions on /owner/verify_otp, /student/verify_otp and /parent/verify_otp. A sudden spike could mean a broken login flow — or someone brute-forcing OTPs.",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "orange",
+                "value": 25
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
+          "expr": "sum(count_over_time({service_name=\"$service\"} | extra_status_code = \"401\" [$__range]))",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Distinct failing app paths",
+      "description": "How many different BatchBook endpoints returned an error in this range. One failing path is a bug; many at once is usually an outage in a shared dependency (Supabase, the DB).",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "orange",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
+          "expr": "count(sum by (extra_path) (count_over_time({service_name=\"$service\"} | extra_path != \"/docs\" | extra_status_code =~ \"[45]..\" | extra_path =~ \"^/(admin|attendance|batch|enrollment|fee|owner|parent|public|scores|student|teacher|webhooks)($|/.*)\" | extra_path !~ \".*\\\\.[a-zA-Z0-9]+$\" [$__range])))",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "App failures over time, by status code",
+      "description": "When BatchBook actually broke. Use this to line up an error burst with a deploy or a traffic spike. Scanner 404s excluded.",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 0,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 0,
+            "fillOpacity": 80,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "4.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "5.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
+          "expr": "sum by (extra_status_code) (count_over_time({service_name=\"$service\"} | extra_path != \"/docs\" | extra_status_code =~ \"[45]..\" | extra_path =~ \"^/(admin|attendance|batch|enrollment|fee|owner|parent|public|scores|student|teacher|webhooks)($|/.*)\" | extra_path !~ \".*\\\\.[a-zA-Z0-9]+$\" [$__auto]))",
+          "legendFormat": "{{extra_status_code}}",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "App failures by status code",
+      "description": "Which kind of failure dominates. 401 = bad OTP, 404 = missing record, 422 = bad request body, 500 = your bug.",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "noValue": "No app failures in this range",
+          "color": {
+            "mode": "continuous-YlRd"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
+          "expr": "sum by (extra_status_code) (count_over_time({service_name=\"$service\"} | extra_path != \"/docs\" | extra_status_code =~ \"[45]..\" | extra_path =~ \"^/(admin|attendance|batch|enrollment|fee|owner|parent|public|scores|student|teacher|webhooks)($|/.*)\" | extra_path !~ \".*\\\\.[a-zA-Z0-9]+$\" [$__range]))",
+          "legendFormat": "{{extra_status_code}}",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Most error-prone endpoints",
+      "description": "The ranked answer to \"what usually breaks\". Each row is a method + path + status combination on a real BatchBook route, ordered by how often it happened.",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 14,
+        "x": 0,
+        "y": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true
+          },
+          "noValue": "No app endpoint failed in this range"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failures"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-YlRd"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Method"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Failures",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
+          "expr": "topk(20, sum by (extra_path, extra_method, extra_status_code) (count_over_time({service_name=\"$service\"} | extra_path != \"/docs\" | extra_status_code =~ \"[45]..\" | extra_path =~ \"^/(admin|attendance|batch|enrollment|fee|owner|parent|public|scores|student|teacher|webhooks)($|/.*)\" | extra_path !~ \".*\\\\.[a-zA-Z0-9]+$\" [$__range])))",
+          "queryType": "instant"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "extra_method": "Method",
+              "extra_path": "Path",
+              "extra_status_code": "Status",
+              "Value": "Failures",
+              "Value #A": "Failures"
+            },
+            "indexByName": {
+              "extra_method": 0,
+              "extra_path": 1,
+              "extra_status_code": 2,
+              "Value": 3,
+              "Value #A": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Where in the code it broke",
+      "description": "Exception sites, grouped by the function and line that logged them. This maps a failure straight onto a file:line in the repo. Only populated when something logs at ERROR or WARNING severity.",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 10,
+        "x": 14,
+        "y": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true
+          },
+          "noValue": "No exceptions logged in this range"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Count"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Line"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Count",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
+          "expr": "topk(20, sum by (code_function_name, code_file_path, code_line_number) (count_over_time({service_name=\"$service\", severity_text=~\"ERROR|CRITICAL|WARNING\"} [$__range])))",
+          "queryType": "instant"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "code_function_name": "Function",
+              "code_file_path": "File",
+              "code_line_number": "Line",
+              "Value": "Count",
+              "Value #A": "Count"
+            },
+            "indexByName": {
+              "code_function_name": 0,
+              "code_file_path": 1,
+              "code_line_number": 2,
+              "Value": 3,
+              "Value #A": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "table",
+      "title": "Bot / scanner probes — 404s on paths BatchBook does not serve",
+      "description": "Internet background radiation: automated scanners hunting for leaked secrets and known CVEs. These are excluded from every panel above, because they are not your app breaking. Watch this panel for two reasons: (1) if a probe ever returns something other than 404, that path is exposing something; (2) /.env and /_ignition probes confirm bots know your host, so keep secrets out of the image and rate-limiting on.",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true
+          },
+          "noValue": "No scanner traffic in this range"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Probes"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-BlPu"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Probes",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
+          "expr": "topk(25, sum by (extra_path, extra_status_code) (count_over_time({service_name=\"$service\"} | extra_path != \"/docs\" | extra_status_code =~ \"[45]..\" | extra_path !~ \"^/(admin|attendance|batch|enrollment|fee|owner|parent|public|scores|student|teacher|webhooks)($|/.*)\" or extra_path =~ \".*\\\\.[a-zA-Z0-9]+$\" [$__range])))",
+          "queryType": "instant"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "extra_path": "Probed path",
+              "extra_status_code": "Status",
+              "Value": "Probes",
+              "Value #A": "Probes"
+            },
+            "indexByName": {
+              "extra_path": 0,
+              "extra_status_code": 1,
+              "Value": 2,
+              "Value #A": 2
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "logs",
+      "title": "Unhandled exceptions (ERROR severity)",
+      "description": "The raw exception lines. Expand a row to see the 'exception' field with the repr, plus the redacted request body that triggered it, and trace_id to jump into Tempo.",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
+          "expr": "{service_name=\"$service\", severity_text=~\"ERROR|CRITICAL\"} |~ \"(?i)$search\"",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "logs",
+      "title": "Failed app requests (4xx / 5xx)",
+      "description": "Every request to a real BatchBook route that returned an error, newest first. Expand a row for the redacted request and response bodies — usually enough to reproduce the failure without asking the user anything.",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
+          "expr": "{service_name=\"$service\"} | extra_path != \"/docs\" | extra_status_code =~ \"[45]..\" | extra_path =~ \"^/(admin|attendance|batch|enrollment|fee|owner|parent|public|scores|student|teacher|webhooks)($|/.*)\" | extra_path !~ \".*\\\\.[a-zA-Z0-9]+$\" |~ \"(?i)$search\"",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "logs",
+      "title": "All application logs (probe excluded)",
+      "description": "Everything the app logged, minus the /docs probe — scanners included, so this is the unfiltered view. Use the 'Free-text filter' variable at the top to grep across these.",
+      "datasource": {
+        "type": "loki",
+        "uid": "grafanacloud-logs"
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "grafanacloud-logs"
+          },
+          "expr": "{service_name=\"$service\"} | extra_path != \"/docs\" |~ \"(?i)$search\"",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "text",
+      "title": "How BatchBook logging works",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 61
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Two different kinds of failure, logged differently.**\n\n| What happened | Severity | How to find it |\n|---|---|---|\n| Handled error — 401 bad OTP, 404 missing record, 422 bad body | `INFO`, message `request completed` | filter on `extra_status_code` |\n| Unhandled exception — a bug escaped the route handler | `ERROR`, message `request failed`, has `exception` field | filter on `severity_text=\"ERROR\"` |\n\nThis is why the panels above key on **status code**, not severity: filtering only on `ERROR` would miss every 4xx and every handled 500.\n\n**Two noise filters are applied.** Without them this dashboard is unreadable — raw log volume is over 99% noise.\n\n1. `| extra_path != \"/docs\"` — drops Render's uptime probe, which hits every 5 seconds.\n2. `| extra_path =~ \"^/(admin|attendance|batch|enrollment|fee|owner|parent|public|scores|student|teacher|webhooks)($|/.*)\"` — keeps only real BatchBook routers. Without this, bot scanners hunting `/.env`, `/graphql` and `/_ignition/execute-solution` account for the overwhelming majority of all 4xx. They are not hidden — they get their own panel above.\n\n**If you add a new router prefix in `app.py`, add it to that regex** or its failures will be misfiled as scanner noise. Current prefixes come from `routes/*.py`.\n\n**Fields available on each line** (loguru `.bind()` in `app.py:log_and_handle_exceptions`, shipped as OTel structured metadata): `extra_method`, `extra_path`, `extra_url`, `extra_status_code`, `extra_duration_ms`, `extra_query_params`, `extra_path_params`, `extra_request_body`, `extra_response_body`, `extra_trace_id`, `extra_span_id`.\n\nBodies are redacted by `request_logging.py` — tokens, passwords, OTPs and API secrets become `[REDACTED]`, and anything over 4 KB is truncated. Bodies in these panels are safe to read and safe to screenshot."
+      }
+    }
+  ]
+}

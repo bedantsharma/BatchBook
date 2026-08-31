@@ -1,0 +1,309 @@
+{
+  "uid": "batchbook-throughput",
+  "title": "BatchBook — Throughput & Latency (Where It's Slow)",
+  "description": "Answers one question: how fast is BatchBook, and which endpoint is dragging. Render's /docs health probe is excluded everywhere via http_target!=\"\" — including it would make the app look 10x faster than it is, since the probe returns in under 1ms.",
+  "tags": ["batchbook", "performance"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "refresh": "1m",
+  "time": {"from": "now-6h", "to": "now"},
+  "links": [
+    {"type": "dashboards", "title": "BatchBook dashboards", "tags": ["batchbook"], "asDropdown": true, "includeVars": true, "keepTime": true, "icon": "external link"}
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+        "definition": "label_values(http_server_duration_milliseconds_count, service_name)",
+        "query": {"qryType": 1, "query": "label_values(http_server_duration_milliseconds_count, service_name)", "refId": "var-service"},
+        "refresh": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": {"text": "batchbook-backend-production", "value": "batchbook-backend-production"},
+        "options": []
+      },
+      {
+        "name": "instance",
+        "label": "Worker",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+        "definition": "label_values(http_server_duration_milliseconds_count{service_name=\"$service\"}, instance)",
+        "query": {"qryType": 1, "query": "label_values(http_server_duration_milliseconds_count{service_name=\"$service\"}, instance)", "refId": "var-instance"},
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {"text": ["All"], "value": ["$__all"]},
+        "options": []
+      },
+      {
+        "name": "route",
+        "label": "Route",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+        "definition": "label_values(http_server_duration_milliseconds_count{service_name=\"$service\", http_target!=\"\"}, http_target)",
+        "query": {"qryType": 1, "query": "label_values(http_server_duration_milliseconds_count{service_name=\"$service\", http_target!=\"\"}, http_target)", "refId": "var-route"},
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {"text": ["All"], "value": ["$__all"]},
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Throughput",
+      "description": "Real requests per second, health probe excluded.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "reqps", "decimals": 3, "color": {"mode": "fixed", "fixedColor": "blue"}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "sum(rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval]))", "legendFormat": "rps", "range": true}]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "P50",
+      "description": "Median. Half of all requests finish faster than this.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "ms", "decimals": 0, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 200}, {"color": "orange", "value": 500}]}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval])))", "legendFormat": "p50", "range": true}]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "P95",
+      "description": "1 request in 20 is slower than this. The number your users complain about.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "ms", "decimals": 0, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 400}, {"color": "orange", "value": 1000}, {"color": "red", "value": 2500}]}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval])))", "legendFormat": "p95", "range": true}]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "P99",
+      "description": "Worst 1%. Usually cold starts, cold connection pools, or an N+1 query.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "ms", "decimals": 0, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 500}, {"color": "orange", "value": 1000}, {"color": "red", "value": 2500}]}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval])))", "legendFormat": "p99", "range": true}]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Snappy (< 250 ms)",
+      "description": "Share of requests served in under 250ms — the threshold where an interaction still feels instant. Aim to keep this above 90%.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "min": 0, "max": 100, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 75}, {"color": "yellow", "value": 90}, {"color": "green", "value": 97}]}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "100 * (sum(rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\", le=\"250\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval])) or vector(0), 0.0000001)", "legendFormat": "< 250ms", "range": true}]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Sluggish (> 1 s)",
+      "description": "Share of requests taking longer than a second. Every one of these is a user staring at a spinner.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "min": 0, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "orange", "value": 5}, {"color": "red", "value": 10}]}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "100 * ((sum(rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval])) or vector(0)) - (sum(rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\", le=\"1000\"}[$__rate_interval])) or vector(0))) / clamp_min(sum(rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval])) or vector(0), 0.0000001)", "legendFormat": "> 1s", "range": true}]
+    },
+
+    {
+      "id": 10,
+      "type": "heatmap",
+      "title": "Latency distribution",
+      "description": "Where requests actually land, over time. A single warm band = consistent performance. A second band higher up = a subset of requests on a slow path. Vertical smears = intermittent stalls.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 4},
+      "fieldConfig": {"defaults": {"custom": {"hideFrom": {"tooltip": false, "viz": false, "legend": false}}}, "overrides": []},
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "cellValues": {"unit": "short"},
+        "color": {"mode": "scheme", "scheme": "Spectral", "reverse": true, "steps": 64, "fill": "dark-orange", "exponent": 0.5, "min": 0},
+        "exemplars": {"color": "rgba(255,0,255,0.7)"},
+        "filterValues": {"le": 1e-9},
+        "legend": {"show": true},
+        "rowsFrame": {"layout": "auto", "value": "requests"},
+        "tooltip": {"mode": "single", "showColorScale": true, "yHistogram": true},
+        "yAxis": {"axisPlacement": "left", "reverse": false, "unit": "ms"}
+      },
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "sum by (le) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval]))", "legendFormat": "{{le}}", "format": "heatmap", "range": true}]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Percentiles over time",
+      "description": "P50 / P90 / P95 / P99 together. If P99 jumps while P50 stays flat, the slowness is confined to a few requests — go find them in the route table below.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 4},
+      "fieldConfig": {"defaults": {"unit": "ms", "decimals": 0, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 5, "spanNulls": true, "axisSoftMin": 0}, "color": {"mode": "palette-classic"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "showLegend": true, "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval])))", "legendFormat": "p50", "range": true},
+        {"refId": "B", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.90, sum by (le) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval])))", "legendFormat": "p90", "range": true},
+        {"refId": "C", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval])))", "legendFormat": "p95", "range": true},
+        {"refId": "D", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval])))", "legendFormat": "p99", "range": true}
+      ]
+    },
+
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Per-route breakdown — sort by any column to find the problem",
+      "description": "The core panel of this dashboard. Every endpoint with its traffic, its percentiles and its error rate, over the selected range. Click the P99 header to rank by tail latency; click Req/s to see what's worth optimising first (slow AND busy beats slow AND rare).",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 13},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "auto", "cellOptions": {"type": "auto"}, "filterable": true}, "decimals": 0},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Route"}, "properties": [{"id": "custom.width", "value": 320}]},
+          {"matcher": {"id": "byName", "options": "Req/s"}, "properties": [{"id": "unit", "value": "reqps"}, {"id": "decimals", "value": 4}, {"id": "custom.width", "value": 110}]},
+          {"matcher": {"id": "byName", "options": "Requests"}, "properties": [{"id": "unit", "value": "short"}, {"id": "decimals", "value": 0}, {"id": "custom.width", "value": 110}]},
+          {"matcher": {"id": "byName", "options": "P50 (ms)"}, "properties": [{"id": "unit", "value": "ms"}, {"id": "custom.cellOptions", "value": {"type": "color-text"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 200}, {"color": "orange", "value": 500}]}}]},
+          {"matcher": {"id": "byName", "options": "P95 (ms)"}, "properties": [{"id": "unit", "value": "ms"}, {"id": "custom.cellOptions", "value": {"type": "color-text"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 400}, {"color": "orange", "value": 1000}, {"color": "red", "value": 2500}]}}]},
+          {"matcher": {"id": "byName", "options": "P99 (ms)"}, "properties": [{"id": "unit", "value": "ms"}, {"id": "custom.cellOptions", "value": {"type": "gauge", "mode": "gradient"}}, {"id": "color", "value": {"mode": "continuous-GrYlRd"}}, {"id": "custom.width", "value": 160}]},
+          {"matcher": {"id": "byName", "options": "Error %"}, "properties": [{"id": "unit", "value": "percent"}, {"id": "decimals", "value": 1}, {"id": "custom.cellOptions", "value": {"type": "color-text"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "orange", "value": 10}, {"color": "red", "value": 25}]}}, {"id": "custom.width", "value": 110}]}
+        ]
+      },
+      "options": {"showHeader": true, "sortBy": [{"displayName": "P99 (ms)", "desc": true}], "footer": {"show": false}},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "sum by (http_target) (rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__range]))", "instant": true, "range": false, "format": "table"},
+        {"refId": "B", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.50, sum by (le, http_target) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__range])))", "instant": true, "range": false, "format": "table"},
+        {"refId": "C", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.95, sum by (le, http_target) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__range])))", "instant": true, "range": false, "format": "table"},
+        {"refId": "D", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.99, sum by (le, http_target) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__range])))", "instant": true, "range": false, "format": "table"},
+        {"refId": "E", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "100 * (sum by (http_target) (rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\", http_status_code=~\"[45]..\"}[$__range])) or sum by (http_target) (rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__range])) * 0) / clamp_min(sum by (http_target) (rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__range])), 0.0000000001)", "instant": true, "range": false, "format": "table"},
+        {"refId": "F", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "sum by (http_target) (increase(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__range]))", "instant": true, "range": false, "format": "table"}
+      ],
+      "transformations": [
+        {"id": "joinByField", "options": {"byField": "http_target", "mode": "outer"}},
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"Time": true, "Time 1": true, "Time 2": true, "Time 3": true, "Time 4": true, "Time 5": true, "Time 6": true},
+            "renameByName": {
+              "http_target": "Route",
+              "Value #A": "Req/s",
+              "Value #B": "P50 (ms)",
+              "Value #C": "P95 (ms)",
+              "Value #D": "P99 (ms)",
+              "Value #E": "Error %",
+              "Value #F": "Requests"
+            },
+            "indexByName": {"http_target": 0, "Value #F": 1, "Value #A": 2, "Value #B": 3, "Value #C": 4, "Value #D": 5, "Value #E": 6}
+          }
+        },
+        {"id": "filterByValue", "options": {"type": "include", "match": "all", "filters": [{"fieldName": "Requests", "config": {"id": "greater", "options": {"value": 0}}}]}}
+      ]
+    },
+
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "P95 by route",
+      "description": "Tail latency per endpoint over time — shows whether a route got slower recently or has always been slow.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 25},
+      "fieldConfig": {"defaults": {"unit": "ms", "decimals": 0, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "spanNulls": true, "axisSoftMin": 0}, "color": {"mode": "palette-classic"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "showLegend": true, "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "topk(8, histogram_quantile(0.95, sum by (le, http_target) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval]))))", "legendFormat": "{{http_target}}", "range": true}]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Throughput by route",
+      "description": "Stacked request rate per endpoint — the shape of your actual workload.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 25},
+      "fieldConfig": {"defaults": {"unit": "reqps", "decimals": 3, "custom": {"drawStyle": "bars", "lineWidth": 0, "fillOpacity": 75, "stacking": {"mode": "normal", "group": "A"}, "axisSoftMin": 0}, "color": {"mode": "palette-classic"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "showLegend": true, "calcs": ["sum"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "topk(10, sum by (http_target) (rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval])))", "legendFormat": "{{http_target}}", "range": true}]
+    },
+
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Latency by HTTP method",
+      "description": "Writes (POST/PUT/PATCH) are normally slower than reads. If GET creeps up to match POST, suspect the database or a missing index.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 34},
+      "fieldConfig": {"defaults": {"unit": "ms", "decimals": 0, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "spanNulls": true, "axisSoftMin": 0}, "color": {"mode": "palette-classic"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.95, sum by (le, http_method) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval])))", "legendFormat": "{{http_method}} p95", "range": true}]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Payload sizes (P95)",
+      "description": "95th percentile request and response body sizes. A growing response payload is a common hidden cause of latency creep — a list endpoint that never got pagination.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 34},
+      "fieldConfig": {"defaults": {"unit": "bytes", "decimals": 0, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "spanNulls": true, "axisSoftMin": 0}, "color": {"mode": "palette-classic"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_response_size_bytes_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval])))", "legendFormat": "response p95", "range": true},
+        {"refId": "B", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_size_bytes_bucket{service_name=\"$service\", instance=~\"$instance\", http_target=~\"$route\"}[$__rate_interval])))", "legendFormat": "request p95", "range": true}
+      ]
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Outbound dependency latency (P95)",
+      "description": "How long third parties take to answer — Supabase auth, Razorpay, Meta WhatsApp. When BatchBook is slow but the DB is fine, this is usually why. (The OTel httpx instrumentation does not record the target host, so all outbound calls share one line.)",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 34},
+      "fieldConfig": {"defaults": {"unit": "ms", "decimals": 0, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "spanNulls": true, "axisSoftMin": 0}, "color": {"mode": "palette-classic"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.95, sum by (le, http_method) (rate(http_client_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\"}[$__rate_interval])))", "legendFormat": "{{http_method}} p95", "range": true}
+      ]
+    },
+
+    {
+      "id": 18,
+      "type": "table",
+      "title": "Slowest individual requests",
+      "description": "Actual worst-case requests pulled from the logs, with their real measured duration — not a bucket estimate. Copy a trace_id from a row into Tempo to see exactly which DB query burned the time.",
+      "datasource": {"type": "loki", "uid": "grafanacloud-logs"},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 42},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "auto", "cellOptions": {"type": "auto"}, "filterable": true}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Value"}, "properties": [{"id": "displayName", "value": "Slowest (ms)"}, {"id": "unit", "value": "ms"}, {"id": "decimals", "value": 0}, {"id": "custom.cellOptions", "value": {"type": "gauge", "mode": "gradient"}}, {"id": "color", "value": {"mode": "continuous-GrYlRd"}}, {"id": "custom.width", "value": 200}]},
+          {"matcher": {"id": "byName", "options": "extra_path"}, "properties": [{"id": "displayName", "value": "Path"}]},
+          {"matcher": {"id": "byName", "options": "extra_method"}, "properties": [{"id": "displayName", "value": "Method"}, {"id": "custom.width", "value": 90}]}
+        ]
+      },
+      "options": {"showHeader": true, "sortBy": [{"displayName": "Slowest (ms)", "desc": true}], "footer": {"show": false}},
+      "targets": [{"refId": "A", "datasource": {"type": "loki", "uid": "grafanacloud-logs"}, "expr": "topk(20, max by (extra_path, extra_method) (max_over_time({service_name=\"$service\"} | extra_path != \"/docs\" | unwrap extra_duration_ms [$__range])))", "queryType": "instant"}],
+      "transformations": [{"id": "organize", "options": {"excludeByName": {"Time": true}, "indexByName": {"extra_method": 0, "extra_path": 1, "Value": 2}}}]
+    },
+
+    {
+      "id": 19,
+      "type": "text",
+      "title": "Reading this dashboard",
+      "gridPos": {"h": 7, "w": 24, "x": 0, "y": 52},
+      "options": {
+        "mode": "markdown",
+        "content": "**Start with the per-route table.** Sort by *P99* to find the slowest endpoint, then check its *Req/s* — a 3-second endpoint nobody calls matters less than a 400ms endpoint on every page load. The `$route` variable at the top filters every panel here, so once you have a suspect, select it and the whole dashboard narrows to that one endpoint.\n\n**Then find out why it's slow:**\n\n1. *Latency distribution* — one band or two? Two bands means a fast path and a slow path (cache hit vs miss, warm vs cold pool).\n2. *Outbound dependency latency* — if this tracks your endpoint latency, the slowness is Supabase/Razorpay/WhatsApp, not your code.\n3. *Slowest individual requests* — grab a `trace_id` from the logs and open it in Tempo to see the individual Postgres spans.\n\n**Known characteristic of this deployment:** the first requests after a Render cold start show DB spans of 150ms+ against the Supabase pooler, versus 2-6ms once warm. Expect P99 spikes after any idle period or deploy; that is cold start, not a regression.\n\n**Precision caveat:** percentiles are interpolated from OTel's default buckets — 0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000 ms. Between 1s and 2.5s the estimate is coarse. The *Slowest individual requests* panel uses exact per-request durations from the logs and is the tiebreaker when the two disagree.\n\n**Noise filter:** every Prometheus panel filters `http_target!=\"\"` (via `$route`), and the logs panel filters `| extra_path != \"/docs\"`, removing Render's 5-second uptime probe."
+      }
+    }
+  ]
+}

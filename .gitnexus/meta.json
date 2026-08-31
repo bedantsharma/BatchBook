@@ -1,14 +1,14 @@
 {
   "repoPath": "/Users/bedantsharma/PycharmProjects/BatchBook",
-  "lastCommit": "aa42239c1328d74d6e6c99f58ee5948cfdbb384d",
-  "indexedAt": "2026-07-08T05:32:17.875Z",
+  "lastCommit": "7047e9f9d782705b32458557ef3a7d5984c7b1d6",
+  "indexedAt": "2026-08-02T19:09:37.072Z",
   "remoteUrl": "git@github.com:bedantsharma/BatchBook",
   "stats": {
-    "files": 359,
-    "nodes": 4710,
-    "edges": 7759,
-    "communities": 241,
-    "processes": 92,
+    "files": 376,
+    "nodes": 5018,
+    "edges": 8223,
+    "communities": 251,
+    "processes": 93,
     "embeddings": 0
   }
 }

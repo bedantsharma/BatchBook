@@ -1,0 +1,266 @@
+{
+  "uid": "batchbook-metasite",
+  "title": "BatchBook — Metasite (Overall Health)",
+  "description": "Single-glance health of the BatchBook backend. Render's /docs health probe (~0.23 req/s, 99.9% of raw traffic) is excluded from every panel via http_target!=\"\" — see the note at the bottom.",
+  "tags": ["batchbook", "overview"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "refresh": "1m",
+  "time": {"from": "now-6h", "to": "now"},
+  "links": [
+    {"type": "dashboards", "title": "BatchBook dashboards", "tags": ["batchbook"], "asDropdown": true, "includeVars": true, "keepTime": true, "icon": "external link"}
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+        "definition": "label_values(http_server_duration_milliseconds_count, service_name)",
+        "query": {"qryType": 1, "query": "label_values(http_server_duration_milliseconds_count, service_name)", "refId": "var-service"},
+        "refresh": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": {"text": "batchbook-backend-production", "value": "batchbook-backend-production"},
+        "options": []
+      },
+      {
+        "name": "instance",
+        "label": "Worker",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+        "definition": "label_values(http_server_duration_milliseconds_count{service_name=\"$service\"}, instance)",
+        "query": {"qryType": 1, "query": "label_values(http_server_duration_milliseconds_count{service_name=\"$service\"}, instance)", "refId": "var-instance"},
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {"text": ["All"], "value": ["$__all"]},
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Requests / sec",
+      "description": "Real application traffic only. The Render health probe on /docs is excluded (it has no http_target label).",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 4, "w": 3, "x": 0, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "reqps", "decimals": 3, "color": {"mode": "fixed", "fixedColor": "blue"}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto", "justifyMode": "auto"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "sum(rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target!=\"\"}[$__rate_interval]))", "legendFormat": "rps", "range": true}]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "5xx error rate",
+      "description": "Share of real requests returning 5xx. Anything above 1% deserves a look at the Logs dashboard.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 4, "w": 3, "x": 3, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 2, "min": 0, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 1}, {"color": "red", "value": 5}]}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto", "justifyMode": "auto"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "100 * (sum(rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target!=\"\", http_status_code=~\"5..\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target!=\"\"}[$__rate_interval])) or vector(0), 0.0000001)", "legendFormat": "5xx %", "range": true}]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "4xx error rate",
+      "description": "Client errors — mostly failed OTP verifications (401) and missing records (404). High 4xx is a product signal, not always a bug.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 4, "w": 3, "x": 6, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 2, "min": 0, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 10}, {"color": "orange", "value": 25}]}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto", "justifyMode": "auto"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "100 * (sum(rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target!=\"\", http_status_code=~\"4..\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target!=\"\"}[$__rate_interval])) or vector(0), 0.0000001)", "legendFormat": "4xx %", "range": true}]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "P99 latency",
+      "description": "99th percentile response time across all real routes.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 4, "w": 3, "x": 9, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "ms", "decimals": 0, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 500}, {"color": "orange", "value": 1000}, {"color": "red", "value": 2500}]}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto", "justifyMode": "auto"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target!=\"\"}[$__rate_interval])))", "legendFormat": "p99", "range": true}]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "P50 latency",
+      "description": "Median response time — what a typical request actually feels like.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 4, "w": 3, "x": 12, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "ms", "decimals": 0, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 200}, {"color": "orange", "value": 500}]}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto", "justifyMode": "auto"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target!=\"\"}[$__rate_interval])))", "legendFormat": "p50", "range": true}]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "In-flight requests",
+      "description": "Requests currently being served across all workers. Sustained growth here means requests are piling up faster than they finish.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 4, "w": 3, "x": 15, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 20}, {"color": "red", "value": 50}]}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto", "justifyMode": "auto"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "sum(http_server_active_requests{service_name=\"$service\", instance=~\"$instance\"})", "legendFormat": "in flight", "range": true}]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "DB connections in use",
+      "description": "Checked-out connections in the SQLAlchemy pool (Supabase transaction pooler). If this pins at the pool ceiling, requests are queueing on the database.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 4, "w": 3, "x": 18, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 8}, {"color": "red", "value": 15}]}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto", "justifyMode": "auto"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "sum(db_client_connections_usage{service_name=\"$service\", instance=~\"$instance\", state=\"used\"})", "legendFormat": "used", "range": true}]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Workers reporting",
+      "description": "Number of uvicorn worker processes currently exporting telemetry. Production runs 2 — if this drops to 1, a worker died or is restarting.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 4, "w": 3, "x": 21, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 1}, {"color": "green", "value": 2}]}}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "textMode": "auto", "justifyMode": "auto"},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "count(count by (instance) (http_server_active_requests{service_name=\"$service\"}))", "legendFormat": "workers", "range": true}]
+    },
+
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Traffic by response code",
+      "description": "Real request rate split by HTTP status. Watch for 4xx/5xx bands appearing or widening.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 3,
+          "custom": {"drawStyle": "bars", "fillOpacity": 70, "stacking": {"mode": "normal", "group": "A"}, "lineWidth": 0, "axisSoftMin": 0},
+          "color": {"mode": "palette-classic"}
+        },
+        "overrides": [
+          {"matcher": {"id": "byRegexp", "options": "2.*"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byRegexp", "options": "4.*"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]},
+          {"matcher": {"id": "byRegexp", "options": "5.*"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]
+      },
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": []}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "sum by (http_status_code) (rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target!=\"\"}[$__rate_interval]))", "legendFormat": "{{http_status_code}}", "range": true}]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Latency percentiles",
+      "description": "P50 / P90 / P99 across all real routes. A widening gap between P50 and P99 means a subset of requests is slow, not the whole app.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "fieldConfig": {"defaults": {"unit": "ms", "decimals": 0, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "spanNulls": true, "axisSoftMin": 0}, "color": {"mode": "palette-classic"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [
+        {"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target!=\"\"}[$__rate_interval])))", "legendFormat": "p50", "range": true},
+        {"refId": "B", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.90, sum by (le) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target!=\"\"}[$__rate_interval])))", "legendFormat": "p90", "range": true},
+        {"refId": "C", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target!=\"\"}[$__rate_interval])))", "legendFormat": "p99", "range": true}
+      ]
+    },
+
+    {
+      "id": 12,
+      "type": "bargauge",
+      "title": "P99 of the 5 slowest paths",
+      "description": "The five slowest endpoints by P99 over the selected time range. This is the shortlist of what to optimise next.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "fieldConfig": {"defaults": {"unit": "ms", "decimals": 0, "min": 0, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 500}, {"color": "orange", "value": 1000}, {"color": "red", "value": 2500}]}}, "overrides": []},
+      "options": {"displayMode": "gradient", "orientation": "horizontal", "showUnfilled": true, "valueMode": "color", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "topk(5, histogram_quantile(0.99, sum by (le, http_target) (rate(http_server_duration_milliseconds_bucket{service_name=\"$service\", instance=~\"$instance\", http_target!=\"\"}[$__range]))))", "legendFormat": "{{http_target}}", "instant": true, "range": false}]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Busiest routes",
+      "description": "Top 10 endpoints by request rate — where your actual traffic goes.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "fieldConfig": {"defaults": {"unit": "reqps", "decimals": 3, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "spanNulls": true, "axisSoftMin": 0}, "color": {"mode": "palette-classic"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "showLegend": true, "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "topk(10, sum by (http_target) (rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target!=\"\"}[$__rate_interval])))", "legendFormat": "{{http_target}}", "range": true}]
+    },
+
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Database connection pool",
+      "description": "SQLAlchemy async pool state per worker. 'used' = checked out and serving a query, 'idle' = pooled and available.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 20},
+      "fieldConfig": {
+        "defaults": {"unit": "short", "decimals": 0, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 20, "stacking": {"mode": "none"}, "spanNulls": true, "axisSoftMin": 0}, "color": {"mode": "palette-classic"}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "used"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
+          {"matcher": {"id": "byName", "options": "idle"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]}
+        ]
+      },
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "sum by (state) (db_client_connections_usage{service_name=\"$service\", instance=~\"$instance\"})", "legendFormat": "{{state}}", "range": true}]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Database calls / sec",
+      "description": "Rate of Postgres query spans, from Tempo traces. Every request fans out into 2-5 DB calls, so this should track request rate as a multiple. A spike without a matching traffic spike means a query loop (N+1).",
+      "datasource": {"type": "tempo", "uid": "grafanacloud-traces"},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 20},
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 2, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 15, "spanNulls": true, "axisSoftMin": 0}, "color": {"mode": "fixed", "fixedColor": "purple"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "single"}},
+      "targets": [{"refId": "A", "datasource": {"type": "tempo", "uid": "grafanacloud-traces"}, "queryType": "traceql", "query": "{resource.service.name=\"$service\" && span.db.system=\"postgresql\"} | rate()"}]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Outbound dependency calls",
+      "description": "Every outbound HTTPS call the backend makes — Supabase auth, Razorpay, Meta WhatsApp — by response code. 4xx/5xx here means a third party is rejecting or failing, which usually surfaces as a 500 to your users.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 20},
+      "fieldConfig": {
+        "defaults": {"unit": "reqps", "decimals": 3, "custom": {"drawStyle": "bars", "lineWidth": 0, "fillOpacity": 70, "stacking": {"mode": "normal", "group": "A"}, "axisSoftMin": 0}, "color": {"mode": "palette-classic"}},
+        "overrides": [
+          {"matcher": {"id": "byRegexp", "options": "2.*"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byRegexp", "options": "4.*"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]},
+          {"matcher": {"id": "byRegexp", "options": "5.*"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]
+      },
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "sum by (http_status_code) (rate(http_client_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\"}[$__rate_interval]))", "legendFormat": "{{http_status_code}}", "range": true}]
+    },
+
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Health-probe traffic (filtered out everywhere else)",
+      "description": "Shown here only for transparency: this is the Render uptime probe hitting /docs every 5 seconds. Every other panel on every BatchBook dashboard excludes it. If this line stops, Render stopped probing — which may mean the service is down.",
+      "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"},
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 28},
+      "fieldConfig": {"defaults": {"unit": "reqps", "decimals": 3, "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "spanNulls": true, "axisSoftMin": 0}, "color": {"mode": "fixed", "fixedColor": "text"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "single"}},
+      "targets": [{"refId": "A", "datasource": {"type": "prometheus", "uid": "grafanacloud-prom"}, "expr": "sum(rate(http_server_duration_milliseconds_count{service_name=\"$service\", instance=~\"$instance\", http_target=\"\"}[$__rate_interval]))", "legendFormat": "excluded probe traffic", "range": true}]
+    },
+    {
+      "id": 18,
+      "type": "text",
+      "title": "How to read this dashboard",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 28},
+      "options": {
+        "mode": "markdown",
+        "content": "**Noise filter.** Render probes `GET /docs` every 5s — about **99.9%** of raw request volume. Those requests carry no `http_target` label, so every panel filters `http_target!=\"\"`. In Loki the equivalent filter is `| extra_path != \"/docs\"`.\n\n**Where to go next**\n\n- Errors, exceptions, what usually breaks → **BatchBook — Logs & Errors**\n- Slow endpoints, latency distribution → **BatchBook — Throughput & Latency**\n\n**Caveats**\n\n- `http_client_duration` has no host label, so outbound calls to Supabase, Razorpay and WhatsApp can't be told apart — only method and status.\n- Percentiles come from OTel's default histogram buckets (5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500ms…), so P99 is bucket-bounded, not exact.\n- Traffic is currently low, so short-window rates can look spiky. Widen the time range for a truer picture."
+      }
+    }
+  ]
+}
